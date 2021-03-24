@@ -1,6 +1,8 @@
-from typing import List
+from math import log2
+
 import pandas as pd
 from scipy import sparse
+from typing import List
 
 
 def get_pbp_sequence(
@@ -19,8 +21,7 @@ def parse_pmen(
 
     df["id"] = pmen.id
     df["mic"] = pmen.mic
-    df_cols = df.columns.to_list()  # reorder columns
-    df = df[df_cols[-2:] + df_cols[:-2]]
+    df["log2_mic"] = pmen.mic.apply(log2)
 
     df = df.loc[~pd.isna(df.mic)]  # drop samples with missing mic
 
@@ -101,6 +102,7 @@ def parse_cdc(cdc: pd.DataFrame, pbp_patterns: List[str]) -> pd.DataFrame:
             "id": df.id,
             "isolates": cdc_isolates,
             "mic": df.mic,
+            "log2_mic": df.mic.apply(log2),
             "a1_type": cdc_a1,
             "b2_type": cdc_b2,
             "x2_type": cdc_x2,
@@ -124,7 +126,7 @@ def build_co_occurrence_graph(
     return sparse.coo_matrix(weighted_adj)
 
 
-if __name__ == "__main__":
+def main():
     cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
     pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
 
@@ -132,3 +134,7 @@ if __name__ == "__main__":
 
     cdc = parse_cdc(cdc, pbp_patterns)
     pmen = parse_pmen(pmen, cdc, pbp_patterns)
+
+
+if __name__ == "__main__":
+    main()
