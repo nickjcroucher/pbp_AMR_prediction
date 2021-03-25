@@ -68,6 +68,10 @@ class ResultsContainer:
     testing_accuracy: float
     validation_accuracy: float
 
+    training_MSE: float
+    testing_MSE: float
+    validation_MSE: float
+
     training_predictions: nptyping.NDArray[nptyping.Float]
     testing_predictions: nptyping.NDArray[nptyping.Float]
     validation_predictions: nptyping.NDArray[nptyping.Float]

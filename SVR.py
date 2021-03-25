@@ -5,12 +5,14 @@ from functools import partial
 from math import log10
 
 import pandas as pd
-from nptyping import NDArray
+import numpy as np
+from nptyping import NDArray, Object, Int
 from Bio.SubsMat.MatrixInfo import blosum62
 from sklearn.svm import SVR
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from bayes_opt import BayesianOptimization
+from scipy.interpolate import interp2d
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -30,7 +32,7 @@ def format_inputs(
     return X, Y
 
 
-def blosum_kernel(X, Y):
+def blosum_kernel(X: NDArray[Object], Y: NDArray[Object]) -> NDArray[Int, Int]:
     n_features = X.shape[1]
     assert n_features == Y.shape[1], "Unequal number of features in inputs"
 
@@ -109,7 +111,7 @@ def optimise_hps(
     optimizer = BayesianOptimization(
         f=partial_fitting_function, pbounds=pbounds, random_state=0
     )
-    optimizer.maximize(n_iter=1000)
+    optimizer.maximize(n_iter=20)
 
     best_hyperparams = {
         "C": 10 ** optimizer.max["params"]["C"],
@@ -130,12 +132,20 @@ def plot_hps(
         }
     )
 
+    # returns function which fits a 2d linear spline which estimates value of
+    # target given C and epsilon
+    interpolator = interp2d(df.C, df.epsilon, df.target, kind="linear")
+
+    x_coords = np.arange(df.C.min(), df.C.max() + 1)
+    y_coords = np.arange(df.epsilon.min(), df.epsilon.max() + 1)
+    target_interpolated = pd.DataFrame(
+        interpolator(x_coords, y_coords), columns=x_coords, index=y_coords
+    )
+
     plt.clf()
-    sns.kdeplot(data=df, x="C", y="epsilon")
-    plt.axvline(x=pbounds["C"][0], color="black")
-    plt.axvline(x=pbounds["C"][1], color="black")
-    plt.axhline(y=pbounds["epsilon"][0], color="black")
-    plt.axhline(y=pbounds["epsilon"][1], color="black")
+    sns.heatmap(target_interpolated)
+    plt.xlabel("C")
+    plt.ylabel("epsilon")
     plt.show()
 
 
@@ -168,7 +178,7 @@ def main():
 
     logging.info("Optimising SVR hyperparameters")
     pbounds = {
-        "C": (log10(1e-8), log10(1)),
+        "C": (log10(1e-12), log10(1e-6)),
         "epsilon": (log10(1e-10), log10(1)),
     }  # log uniform distribution
     best_hps, optimizer = optimise_hps(
@@ -187,6 +197,9 @@ def main():
         training_predictions=train_predictions,
         testing_predictions=test_predictions,
         validation_predictions=validate_predictions,
+        training_MSE=mean_squared_error(y_train, train_predictions),
+        testing_MSE=mean_squared_error(y_test, test_predictions),
+        validation_MSE=mean_squared_error(y_validate, validate_predictions),
         training_accuracy=accuracy(train_predictions, y_train),
         testing_accuracy=accuracy(test_predictions, y_test),
         validation_accuracy=accuracy(validate_predictions, y_validate),
