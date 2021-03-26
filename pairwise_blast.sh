@@ -1,0 +1,1 @@
+blastp -query <(echo -e ">A\n{$1}") -subject <(echo -e ">B\n{$2}") -outfmt "10 delim=@ evalue" 

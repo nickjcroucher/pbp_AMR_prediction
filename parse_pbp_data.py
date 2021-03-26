@@ -1,4 +1,6 @@
+import subprocess
 from math import log2
+from itertools import combinations
 
 import pandas as pd
 from scipy import sparse
@@ -115,6 +117,27 @@ def parse_cdc(cdc: pd.DataFrame, pbp_patterns: List[str]) -> pd.DataFrame:
     return cdc_seqs
 
 
+def pairwise_blast_comparisons(data, pbp):
+    combos = list(combinations(data[f"{pbp}_seq"], 2))
+
+    e_values = {i: None for i in combos}
+    n = 0
+    n_max = len(combos)
+    for pair in combos:
+        e_value = float(
+            subprocess.check_output(
+                f"bash pairwise_blast.sh {pair[0]} {pair[1]}",
+                shell=True,
+                stderr=subprocess.DEVNULL,
+            )
+        )
+        e_values[pair] = e_value
+        print(f"\r{n}/{n_max}", end="")
+        n += 1
+
+    return e_values
+
+
 def build_co_occurrence_graph(
     df: pd.DataFrame, pbp_patterns: List[str]
 ) -> sparse.coo_matrix:
@@ -134,7 +157,3 @@ def main():
 
     cdc = parse_cdc(cdc, pbp_patterns)
     pmen = parse_pmen(pmen, cdc, pbp_patterns)
-
-
-if __name__ == "__main__":
-    main()
