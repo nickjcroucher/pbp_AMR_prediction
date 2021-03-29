@@ -1,10 +1,12 @@
 import subprocess
 from math import log2
 from itertools import combinations
+from typing import List
 
 import pandas as pd
+import numpy as np
 from scipy import sparse
-from typing import List
+from sklearn.preprocessing import OneHotEncoder
 
 
 def get_pbp_sequence(
@@ -138,6 +140,61 @@ def pairwise_blast_comparisons(data, pbp):
     return e_values
 
 
+def encode_sequences(data, pbp_patterns):
+    """
+    One hot encoding of sequences
+    """
+    amino_acids = [
+        "A",
+        "C",
+        "G",
+        "H",
+        "I",
+        "L",
+        "M",
+        "P",
+        "S",
+        "T",
+        "V",
+        "D",
+        "E",
+        "F",
+        "K",
+        "N",
+        "Q",
+        "R",
+        "W",
+        "Y",
+    ]
+
+    pbp_seqs = [i + "_seq" for i in pbp_patterns]
+    # have to check all sequences of each type are same length because they are
+    # combined into one before being encoded
+    for pbp in pbp_seqs:
+        assert (
+            data[pbp].apply(len).nunique() == 1
+        ), f"More than one length sequence found in column {pbp} cannot encode"
+
+    joined_sequences = data[pbp_seqs[0]].str.cat(
+        data[pbp_seqs[1:]].astype(str)
+    )
+    n_var = len(joined_sequences.iloc[0])
+    joined_sequences = np.array(joined_sequences.apply(list).to_list()).astype(
+        np.object
+    )  # format as array for encoder
+
+    enc = OneHotEncoder(
+        handle_unknown="error",
+        categories=[amino_acids for i in range(n_var)],
+        sparse=True,
+        dtype=int,
+    )
+    enc.fit(joined_sequences)
+    data_encoded = enc.transform(joined_sequences)
+
+    return data_encoded
+
+
 def build_co_occurrence_graph(
     df: pd.DataFrame, pbp_patterns: List[str]
 ) -> sparse.coo_matrix:
@@ -157,3 +214,6 @@ def main():
 
     cdc = parse_cdc(cdc, pbp_patterns)
     pmen = parse_pmen(pmen, cdc, pbp_patterns)
+
+    cdc_encoded_sequences = encode_sequences(cdc, pbp_patterns)
+    pmen_encoded_sequences = encode_sequences(pmen, pbp_patterns)
