@@ -32,6 +32,39 @@ def format_inputs(
     return X, Y
 
 
+def pseudo_hamming_kernel(
+    X: NDArray[Object], Y: NDArray[Object]
+) -> NDArray[(Any, Any), Int]:
+    n_features = X.shape[1]
+    assert n_features == Y.shape[1], "Unequal number of features in inputs"
+
+    def _pseudo_hamming_distance(sequences):
+        seq_1, seq_2 = sequences.split("_")
+        return sum(seq_1[i] != seq_2[i] for i in range(len(seq_1)))
+
+    distance_matrices = []
+    for i in range(n_features):
+        x_ith_feature = X[:, i]
+        y_ith_feature = Y[:, i]
+
+        # dataframe of sequences of each pbp in X and Y delimited by _
+        df = pd.DataFrame(
+            {
+                n: pd.Series(x_ith_feature)
+                + "_"
+                + pd.Series([y_ith_feature[n]] * X.shape[0])
+                for n in range(Y.shape[0])
+            }
+        )
+
+        # apply function to each cell of df
+        distances = df.applymap(_pseudo_hamming_distance)
+        distance_matrices.append(distances.to_numpy())
+
+    # metric is sum of blosum distances for each pbp
+    return sum(distance_matrices)
+
+
 def blast_kernel(
     X: NDArray[Object], Y: NDArray[Object]
 ) -> NDArray[(Any, Any), Int]:
@@ -165,9 +198,9 @@ def main():
         )
         # evaluating kernel is slowest part of training process so do it once
         # here and use gram matrix to fit model
-        gram_train = blast_kernel(X_train, X_train)
-        gram_test = blast_kernel(X_test, X_train)
-        gram_validate = blast_kernel(X_validate, X_train)
+        gram_train = pseudo_hamming_kernel(X_train, X_train)
+        gram_test = pseudo_hamming_kernel(X_test, X_train)
+        gram_validate = pseudo_hamming_kernel(X_validate, X_train)
 
         logging.info("Optimising SVR hyperparameters")
         pbounds = {
