@@ -72,6 +72,10 @@ class ResultsContainer:
     testing_MSE: float
     validation_MSE: float
 
+    training_mean_acc_per_bin: float
+    testing_mean_acc_per_bin: float
+    validation_mean_acc_per_bin: float
+
     training_predictions: nptyping.NDArray[nptyping.Float]
     testing_predictions: nptyping.NDArray[nptyping.Float]
     validation_predictions: nptyping.NDArray[nptyping.Float]
