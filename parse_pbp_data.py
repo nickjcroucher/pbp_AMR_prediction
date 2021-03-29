@@ -1,12 +1,12 @@
 import subprocess
 from math import log2
 from itertools import combinations
-from typing import List
+from typing import List, Tuple
 
 import pandas as pd
 import numpy as np
-from scipy import sparse
 from sklearn.preprocessing import OneHotEncoder
+from scipy import sparse
 
 
 def get_pbp_sequence(
@@ -197,13 +197,23 @@ def encode_sequences(data, pbp_patterns):
 
 def build_co_occurrence_graph(
     df: pd.DataFrame, pbp_patterns: List[str]
-) -> sparse.coo_matrix:
+) -> Tuple[sparse.csr_matrix, sparse.csr_matrix]:
     matches = [
         df[f"{pbp}_type"].apply(lambda x: df[f"{pbp}_type"] == x).astype(int)
         for pbp in pbp_patterns
-    ]
-    weighted_adj = sum(matches)
-    return sparse.coo_matrix(weighted_adj)
+    ]  # adjacency matrix built from this will have self loops
+
+    # add together matches to get adjacency matrix using all sequences
+    weighted_adj = matches[0]
+    if len(matches) > 1:
+        for i in matches[1:]:
+            weighted_adj += i
+
+    adj = weighted_adj.applymap(
+        lambda x: min(x, 1)
+    ).to_numpy()  # adjacency matrix
+    deg = np.diag(np.apply_along_axis(sum, 0, adj))  # degree matrix
+    return sparse.csr_matrix(adj), sparse.csr_matrix(deg)
 
 
 def main():
@@ -215,5 +225,12 @@ def main():
     cdc = parse_cdc(cdc, pbp_patterns)
     pmen = parse_pmen(pmen, cdc, pbp_patterns)
 
-    cdc_encoded_sequences = encode_sequences(cdc, pbp_patterns)
-    pmen_encoded_sequences = encode_sequences(pmen, pbp_patterns)
+    cdc_encoded_sequences = encode_sequences(cdc, pbp_patterns)  # noqa: F841
+    pmen_encoded_sequences = encode_sequences(pmen, pbp_patterns)  # noqa: F841
+
+    cdc_adj, cdc_deg = build_co_occurrence_graph(
+        cdc, pbp_patterns
+    )  # noqa: F841
+    pmen_adj, pmen_deg = build_co_occurrence_graph(
+        pmen, pbp_patterns
+    )  # noqa: F841

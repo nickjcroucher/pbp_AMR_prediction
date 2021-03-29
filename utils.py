@@ -19,7 +19,8 @@ def accuracy(
 
 
 def mean_acc_per_bin(
-    predictions: nptyping.NDArray[float], labels: nptyping.NDArray[float]
+    predictions: nptyping.NDArray[nptyping.Float],
+    labels: nptyping.NDArray[nptyping.Float],
 ) -> float:
     """
     Splits labels into bins of size = bin_size, and calculates the prediction
@@ -85,3 +86,24 @@ class ResultsContainer:
     model_type: str
 
     model: Any
+
+    def __repr__(self):
+        return (
+            f"model: {self.model_type}\n"
+            + f"model_hyperparameters: {self.hyperparameters},\n"
+            + "\n"
+            + "ACCURACY\n"
+            + f"Training Data Accuracy = {self.training_accuracy}\n"
+            + f"Testing Data Accuracy = {self.testing_accuracy}\n"
+            + f"Validation Data Accuracy = {self.validation_accuracy}\n"
+            + "\n"
+            + "MEAN ACCURACY PER BIN\n"
+            + f"Training Data Mean Accuracy = {self.training_mean_acc_per_bin}\n"
+            + f"Testing Data Mean Accuracy = {self.testing_mean_acc_per_bin}\n"
+            + f"Validation Data Mean Accuracy = {self.validation_mean_acc_per_bin}\n"
+            + "\n"
+            + "MSE\n"
+            + f"Training Data MSE = {self.training_MSE}\n"
+            + f"Testing Data MSE = {self.testing_MSE}\n"
+            + f"Validation Data MSE = {self.validation_MSE}\n"
+        )
