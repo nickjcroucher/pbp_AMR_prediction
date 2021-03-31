@@ -1,12 +1,16 @@
 import subprocess
+import logging
 from math import log2
-from itertools import combinations
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import OneHotEncoder
 from scipy import sparse
+
+
+logging.basicConfig()
+logging.root.setLevel(logging.INFO)
 
 
 def get_pbp_sequence(
@@ -30,20 +34,23 @@ def parse_pmen(
     df = df.loc[~pd.isna(df.mic)]  # drop samples with missing mic
 
     def match_pbp_types(df, pbp, cdc=cdc):
+        pbp_type = f"{pbp}_type"
+        pbp_seq = f"{pbp}_seq"
+
         df = df.merge(
-            cdc[[f"{pbp}_type", f"{pbp}_seq"]].drop_duplicates(),
+            cdc[[pbp_type, pbp_seq]].drop_duplicates(),
             left_on=pbp,
-            right_on=f"{pbp}_seq",
+            right_on=pbp_seq,
             how="left",
         )
 
         # are there pbp types in pmen that aren't in cdc?
-        if any(pd.isna(df[f"{pbp}_type"])):
-            last_pbp_type = cdc[f"{pbp}_type"].astype(int).max()
+        if any(pd.isna(df[pbp_type])):
+            last_pbp_type = cdc[pbp_type].astype(int).max()
 
             # dataframe for naming novel pbp types in pmen data
             additional_pbps = pd.DataFrame(
-                df.loc[pd.isna(df[f"{pbp}_type"])][f"{pbp}"].unique()
+                df.loc[pd.isna(df[pbp_type])][pbp].unique()
             )
             additional_pbps[1] = list(
                 range(
@@ -51,26 +58,24 @@ def parse_pmen(
                 )
             )
             additional_pbps.rename(
-                columns={0: f"{pbp}_seq", 1: f"{pbp}_type"}, inplace=True
+                columns={0: pbp_seq, 1: pbp_type}, inplace=True
             )
-            additional_pbps[f"{pbp}_type"] = additional_pbps[
-                f"{pbp}_type"
-            ].astype(str)
+            additional_pbps[pbp_type] = additional_pbps[pbp_type].astype(str)
 
             # add newly named pbp sequences back to dataframe and format
             df = df.merge(
                 additional_pbps,
                 left_on=pbp,
-                right_on=f"{pbp}_seq",
+                right_on=pbp_seq,
                 how="outer",
             )
-            df[f"{pbp}_seq_x"].fillna(df[f"{pbp}_seq_y"], inplace=True)
-            df[f"{pbp}_type_x"].fillna(df[f"{pbp}_type_y"], inplace=True)
-            df.drop(columns=[f"{pbp}_seq_y", f"{pbp}_type_y"], inplace=True)
+            df[f"{pbp_seq}_x"].fillna(df[f"{pbp_seq}_y"], inplace=True)
+            df[f"{pbp_type}_x"].fillna(df[f"{pbp_type}_y"], inplace=True)
+            df.drop(columns=[f"{pbp_seq}_y", f"{pbp_type}_y"], inplace=True)
             df.rename(
                 columns={
-                    f"{pbp}_seq_x": f"{pbp}_seq",
-                    f"{pbp}_type_x": f"{pbp}_type",
+                    f"{pbp_seq}_x": pbp_seq,
+                    f"{pbp_type}_x": pbp_type,
                 },
                 inplace=True,
             )
@@ -119,28 +124,57 @@ def parse_cdc(cdc: pd.DataFrame, pbp_patterns: List[str]) -> pd.DataFrame:
     return cdc_seqs
 
 
-def pairwise_blast_comparisons(data, pbp):
-    combos = list(combinations(data[f"{pbp}_seq"], 2))
+def pairwise_blast_comparisons(
+    df: pd.DataFrame, pbp: str
+) -> Dict[str, Dict[str, float]]:
+    pbp_type = f"{pbp}_type"
+    pbp_seq = f"{pbp}_seq"
 
-    e_values = {i: None for i in combos}
-    n = 0
-    n_max = len(combos)
-    for pair in combos:
-        e_value = float(
-            subprocess.check_output(
-                f"bash pairwise_blast.sh {pair[0]} {pair[1]}",
-                shell=True,
-                stderr=subprocess.DEVNULL,
-            )
-        )
-        e_values[pair] = e_value
-        print(f"\r{n}/{n_max}", end="")
-        n += 1
+    df = df[[pbp_seq, pbp_type]].drop_duplicates()
+    combos = pd.DataFrame(
+        {
+            i: df[pbp_seq] + "_" + df.loc[df[pbp_type] == i][pbp_seq].iloc[0]
+            for i in df[pbp_type]
+        }
+    )
 
-    return e_values
+    # lower triangular to remove inverse matches for which e score will
+    # be equal same
+    combos_tril = pd.DataFrame(
+        np.tril(combos.to_numpy()),
+        columns=df[pbp_type].tolist(),
+        index=df[pbp_type].tolist(),
+    )
+    np.fill_diagonal(combos_tril.values, 0)  # assign 0 to the diagonal
+
+    def blast(sequences):
+        if sequences == 0:
+            return 0.0
+        else:
+            seq_1, seq_2 = sequences.split("_")
+            try:
+                e_value = float(
+                    subprocess.check_output(
+                        f"bash pairwise_blast.sh {seq_1} {seq_2}", shell=True
+                    )
+                )
+            except Exception as ex:
+                logging.warning(ex)
+                e_value = -1.0
+            return e_value
+
+    e_values_tril = combos_tril.applymap(blast)
+    e_values_triu = e_values_tril.T
+    e_values = (
+        e_values_tril + e_values_triu
+    )  # combine so pbps can be searched in either order
+
+    return e_values.to_dict()  # dictionary is quicker to search
 
 
-def encode_sequences(data, pbp_patterns):
+def encode_sequences(
+    data: pd.DataFrame, pbp_patterns: List[str]
+) -> sparse.csr_matrix:
     """
     One hot encoding of sequences
     """
