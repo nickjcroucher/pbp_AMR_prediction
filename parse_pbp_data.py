@@ -1,5 +1,6 @@
 import subprocess
 import logging
+from itertools import combinations
 from math import log2
 from typing import List, Tuple, Dict
 
@@ -173,7 +174,7 @@ def pairwise_blast_comparisons(
 
 
 def encode_sequences(
-    data: pd.DataFrame, pbp_patterns: List[str]
+    data: pd.DataFrame, pbp_patterns: List[str], interactions: bool = False
 ) -> sparse.csr_matrix:
     """
     One hot encoding of sequences
@@ -209,24 +210,60 @@ def encode_sequences(
             data[pbp].apply(len).nunique() == 1
         ), f"More than one length sequence found in column {pbp} cannot encode"
 
-    joined_sequences = data[pbp_seqs[0]].str.cat(
-        data[pbp_seqs[1:]].astype(str)
-    )
-    n_var = len(joined_sequences.iloc[0])
-    joined_sequences = np.array(joined_sequences.apply(list).to_list()).astype(
-        np.object
-    )  # format as array for encoder
+    encoded_sequences = []
+    for pbp in pbp_seqs:
+        sequences = data[pbp]
+        n_var = len(sequences.iloc[0])
 
-    enc = OneHotEncoder(
-        handle_unknown="error",
-        categories=[amino_acids for i in range(n_var)],
-        sparse=True,
-        dtype=int,
-    )
-    enc.fit(joined_sequences)
-    data_encoded = enc.transform(joined_sequences)
+        # format as array for encoder
+        sequences = np.array(sequences.apply(list).to_list()).astype(np.object)
 
-    return data_encoded
+        enc = OneHotEncoder(
+            handle_unknown="error",
+            categories=[amino_acids for i in range(n_var)],
+            sparse=False,
+            dtype=int,
+        )
+        enc.fit(sequences)
+        encoded_sequences.append(enc.transform(sequences))
+
+    if interactions:
+
+        def interact(encoded_seqs):
+            seqs_1, seqs_2 = encoded_seqs
+
+            # if sequences are different length pad the shorter one with zeros
+            length_difference = seqs_1.shape[1] - seqs_2.shape[1]
+            if length_difference < 0:
+                seqs_1 = np.array(
+                    [
+                        np.concatenate([i, np.zeros(abs(length_difference))])
+                        for i in seqs_1
+                    ]
+                )
+            elif length_difference > 0:
+                seqs_2 = np.array(
+                    [
+                        np.concatenate([i, np.zeros(length_difference)])
+                        for i in seqs_2
+                    ]
+                )
+
+            # element wise product of encoded sequences for each sample
+            sequence_interactions = np.array(
+                [seqs_1[i] * seqs_2[i] for i in range(len(seqs_1))]
+            )
+
+            return np.expand_dims(sequence_interactions, axis=1)
+
+        combos = combinations(encoded_sequences, 2)
+        data_encoded = np.concatenate(
+            encoded_sequences + [interact(i) for i in combos], axis=1
+        )
+    else:
+        data_encoded = np.concatenate(encoded_sequences, axis=1)
+
+    return sparse.csr_matrix(data_encoded)
 
 
 def build_co_occurrence_graph(
