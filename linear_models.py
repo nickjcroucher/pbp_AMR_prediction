@@ -55,7 +55,7 @@ def fit_model(
     train: Tuple[Union[csr_matrix, NDArray], NDArray],
     model_type: str,
     **kwargs,
-) -> ElasticNet:
+) -> Union[ElasticNet, Lasso]:
     max_iter = 100000
     fitted = False
     while not fitted:
@@ -100,7 +100,7 @@ def optimise_hps(
     train: Tuple[Union[NDArray, csr_matrix], NDArray],
     test: Tuple[Union[NDArray, csr_matrix], NDArray],
     pbounds: Dict[str, Tuple[float, float]],
-    model_type: str = "elastic_net",
+    model_type: str,
 ) -> BayesianOptimization:
     partial_fitting_function = partial(
         train_evaluate, train=train, test=test, model_type=model_type
@@ -122,7 +122,7 @@ def normed_laplacian(adj: csr_matrix, deg: csr_matrix) -> csr_matrix:
 def load_data(adj_convolution: bool, laplacian_convolution: bool):
     if adj_convolution is True and laplacian_convolution is True:
         raise ValueError(
-            "Only one of adj_convolution or laplacian_convolution can be applied"
+            "Only one of adj_convolution or laplacian_convolution can be used"
         )
 
     cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
@@ -172,6 +172,7 @@ def load_data(adj_convolution: bool, laplacian_convolution: bool):
 
 def main():
     model_type = "elastic_net"
+    # model_type = "lasso"
 
     logging.info("Loading data")
     train, test, validate = load_data(
@@ -185,7 +186,9 @@ def main():
         pbounds = {"alpha": [0.5, 1.5]}
     else:
         raise NotImplementedError(model_type)
-    optimizer = optimise_hps(train, test, pbounds, model_type)  # select hps using GP
+    optimizer = optimise_hps(
+        train, test, pbounds, model_type
+    )  # select hps using GP
 
     logging.info(
         f"Fitting model with optimal hyperparameters: {optimizer.max['params']}"
@@ -216,6 +219,6 @@ def main():
             validate_predictions, validate[1]
         ),
         hyperparameters=optimizer.max["params"],
-        model_type="elastic_net",
+        model_type=model_type,
         model=model,
     )
