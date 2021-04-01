@@ -1,6 +1,6 @@
 import logging
 import warnings
-from functools import partial
+from functools import partial, lru_cache
 from typing import Tuple, Dict, Union
 
 import pandas as pd
@@ -119,7 +119,14 @@ def normed_laplacian(adj: csr_matrix, deg: csr_matrix) -> csr_matrix:
     return deg_ * adj * deg_
 
 
-def load_data(adj_convolution: bool, laplacian_convolution: bool):
+@lru_cache(maxsize=1)
+def load_data(
+    adj_convolution: bool, laplacian_convolution: bool, interactions: bool
+) -> Tuple[
+    Tuple[csr_matrix, pd.Series],
+    Tuple[csr_matrix, pd.Series],
+    Tuple[csr_matrix, pd.Series],
+]:
     if adj_convolution is True and laplacian_convolution is True:
         raise ValueError(
             "Only one of adj_convolution or laplacian_convolution can be used"
@@ -133,8 +140,8 @@ def load_data(adj_convolution: bool, laplacian_convolution: bool):
     cdc = parse_cdc(cdc, pbp_patterns)
     pmen = parse_pmen(pmen, cdc, pbp_patterns)
 
-    cdc_encoded_sequences = encode_sequences(cdc, pbp_patterns)
-    pmen_encoded_sequences = encode_sequences(pmen, pbp_patterns)
+    cdc_encoded_sequences = encode_sequences(cdc, pbp_patterns, interactions)
+    pmen_encoded_sequences = encode_sequences(pmen, pbp_patterns, interactions)
 
     if adj_convolution:
         logging.info("Applying graph convolution")
@@ -176,12 +183,12 @@ def main():
 
     logging.info("Loading data")
     train, test, validate = load_data(
-        adj_convolution=False, laplacian_convolution=True
+        adj_convolution=False, laplacian_convolution=False, interactions=True
     )
 
     logging.info("Optimising the model for the test data accuracy")
     if model_type == "elastic_net":
-        pbounds = {"l1_ratio": [0.3, 0.7], "alpha": [0.5, 1.5]}
+        pbounds = {"l1_ratio": [0.05, 0.95], "alpha": [0.05, 1.95]}
     elif model_type == "lasso":
         pbounds = {"alpha": [0.5, 1.5]}
     else:
