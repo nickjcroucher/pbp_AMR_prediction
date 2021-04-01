@@ -1,6 +1,5 @@
 import logging
 import pickle
-import subprocess
 from typing import List, Tuple, Dict, Any
 from functools import partial
 from math import log10
@@ -17,7 +16,7 @@ from bayes_opt import BayesianOptimization
 from scipy.interpolate import interp2d
 
 from parse_pbp_data import parse_cdc, parse_pmen
-from utils import accuracy, ResultsContainer
+from utils import accuracy, ResultsContainer, mean_acc_per_bin
 
 
 logging.basicConfig()
@@ -66,21 +65,16 @@ def pseudo_hamming_kernel(
 
 
 def blast_kernel(
-    X: NDArray[Object], Y: NDArray[Object]
+    X: NDArray[Object], Y: NDArray[Object], pbps: List[str]
 ) -> NDArray[(Any, Any), Int]:
     n_features = X.shape[1]
     assert n_features == Y.shape[1], "Unequal number of features in inputs"
 
-    def _blast_distance(sequences):
+    def _blast_distance(sequences, blast_distances_dict, seq_to_type):
         seq_1, seq_2 = sequences.split("_")
-
-        e_value = subprocess.check_output(
-            f"bash pairwise_blast.sh {seq_1} {seq_2}",
-            shell=True,
-            stderr=subprocess.DEVNULL,
-        )
-
-        return float(e_value)
+        type_1 = seq_to_type[seq_1]
+        type_2 = seq_to_type[seq_2]
+        return blast_distances_dict[type_1][type_2]
 
     distance_matrices = []
     for i in range(n_features):
@@ -97,8 +91,20 @@ def blast_kernel(
             }
         )
 
+        pbp = pbps[i]
+        with open(f"blast_distances/{pbp}_blast_distances.pkl", "rb") as a:
+            blast_distances_dict = pickle.load(a)
+        with open(f"blast_distances/{pbp}_seq_to_type.pkl", "rb") as a:
+            seq_to_type = pickle.load(a)
+
+        distance_function = partial(
+            _blast_distance,
+            blast_distances_dict=blast_distances_dict,
+            seq_to_type=seq_to_type,
+        )
+
         # apply function to each cell of df
-        distances = df.applymap(_blast_distance)
+        distances = df.applymap(distance_function)
         distance_matrices.append(distances.to_numpy())
 
     # metric is sum of blosum distances for each pbp
@@ -198,9 +204,11 @@ def main():
         )
         # evaluating kernel is slowest part of training process so do it once
         # here and use gram matrix to fit model
-        gram_train = pseudo_hamming_kernel(X_train, X_train)
-        gram_test = pseudo_hamming_kernel(X_test, X_train)
-        gram_validate = pseudo_hamming_kernel(X_validate, X_train)
+        gram_train = blast_kernel(X_train, X_train, pbp_patterns[i : i + 1])
+        gram_test = blast_kernel(X_test, X_train, pbp_patterns[i : i + 1])
+        gram_validate = blast_kernel(
+            X_validate, X_train, pbp_patterns[i : i + 1]
+        )
 
         logging.info("Optimising SVR hyperparameters")
         pbounds = {
@@ -210,7 +218,7 @@ def main():
         best_hps, optimizer = optimise_hps(
             (gram_train, y_train), (gram_test, y_test), pbounds
         )
-        plot_hps(optimizer, pbounds)
+        # plot_hps(optimizer, pbounds)
 
         logging.info("Fitting model with optimised hyperparameters")
         model = fit_model((gram_train, y_train), **best_hps)
@@ -231,6 +239,15 @@ def main():
             training_accuracy=accuracy(train_predictions, y_train),
             testing_accuracy=accuracy(test_predictions, y_test),
             validation_accuracy=accuracy(validate_predictions, y_validate),
+            training_mean_acc_per_bin=mean_acc_per_bin(
+                train_predictions, y_train
+            ),
+            testing_mean_acc_per_bin=mean_acc_per_bin(
+                test_predictions, y_test
+            ),
+            validation_mean_acc_per_bin=mean_acc_per_bin(
+                validate_predictions, y_validate
+            ),
             hyperparameters=best_hps,
             model_type="SVR",
             model=model,
