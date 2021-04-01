@@ -239,7 +239,9 @@ def fit_model(
     if return_model:
         return model
     else:
-        return -(training_metrics.validation_data_loss)
+        return -(
+            min(training_metrics.validation_data_loss)
+        )  # return lowest validation data MSE encountered in training
 
 
 def main():
