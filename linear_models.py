@@ -89,7 +89,7 @@ def train_evaluate(
 ) -> float:
     reg = fit_model(train, model_type, **kwargs)
     MSE = mean_squared_error(test[1], reg.predict(test[0]))
-    return -MSE
+    return -MSE  # pylint: disable=invalid-unary-operand-type
 
 
 def optimise_hps(
@@ -117,7 +117,10 @@ def normed_laplacian(adj: csr_matrix, deg: csr_matrix) -> csr_matrix:
 
 @lru_cache(maxsize=1)
 def load_data(
-    adj_convolution: bool, laplacian_convolution: bool, interactions: bool
+    filter_pmen: bool = False,
+    adj_convolution: bool = False,
+    laplacian_convolution: bool = False,
+    interactions: bool = False,
 ) -> Tuple[
     Tuple[csr_matrix, pd.Series],
     Tuple[csr_matrix, pd.Series],
@@ -135,6 +138,17 @@ def load_data(
 
     cdc = parse_cdc(cdc, pbp_patterns)
     pmen = parse_pmen(pmen, cdc, pbp_patterns)
+
+    if filter_pmen:
+        for pbp in pbp_patterns:
+            pbp_type = f"{pbp}_type"
+            pmen_types = set(pmen[pbp_type])
+            cdc_types = set(cdc[pbp_type])
+
+            pmen_types = filter(  # type: ignore
+                lambda x: x in cdc_types, pmen_types
+            )
+            pmen = pmen.loc[pmen[pbp_type].isin(list(pmen_types))]
 
     cdc_encoded_sequences = encode_sequences(cdc, pbp_patterns, interactions)
     pmen_encoded_sequences = encode_sequences(pmen, pbp_patterns, interactions)
@@ -178,9 +192,7 @@ def main():
     # model_type = "lasso"
 
     logging.info("Loading data")
-    train, test, validate = load_data(
-        adj_convolution=False, laplacian_convolution=False, interactions=True
-    )
+    train, test, validate = load_data(filter_pmen=True)
 
     logging.info("Optimising the model for the test data accuracy")
     if model_type == "elastic_net":
@@ -194,7 +206,7 @@ def main():
     )  # select hps using GP
 
     logging.info(
-        f"Fitting model with optimal hyperparameters: {optimizer.max['params']}"
+        f"Fitting model with optimal hyperparameters: {optimizer.max['params']}"  # noqa: E501
     )
     model = fit_model(
         train, model_type=model_type, **optimizer.max["params"]
