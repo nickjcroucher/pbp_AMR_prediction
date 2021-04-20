@@ -1,3 +1,5 @@
+import pickle
+import os
 import logging
 import warnings
 from functools import partial, lru_cache
@@ -18,7 +20,13 @@ from parse_pbp_data import (
     encode_sequences,
     build_co_occurrence_graph,
 )
-from utils import accuracy, mean_acc_per_bin, ResultsContainer
+from utils import (
+    accuracy,
+    mean_acc_per_bin,
+    ResultsContainer,
+    parse_blosum_matrix,
+    closest_blosum_sequence,
+)
 
 
 def _fit_en(
@@ -117,7 +125,7 @@ def normed_laplacian(adj: csr_matrix, deg: csr_matrix) -> csr_matrix:
 
 @lru_cache(maxsize=1)
 def load_data(
-    filter_pmen: bool = False,
+    blosum_inference: bool = False,
     adj_convolution: bool = False,
     laplacian_convolution: bool = False,
     interactions: bool = False,
@@ -137,54 +145,130 @@ def load_data(
     pbp_patterns = ["a1", "b2", "x2"]
 
     cdc = parse_cdc(cdc, pbp_patterns)
+    train, test = train_test_split(cdc, test_size=0.33, random_state=0)
     pmen = parse_pmen(pmen, cdc, pbp_patterns)
 
-    if filter_pmen:
-        for pbp in pbp_patterns:
-            pbp_type = f"{pbp}_type"
-            pmen_types = set(pmen[pbp_type])
-            cdc_types = set(cdc[pbp_type])
+    # filters data by pbp types which appear in training data
+    def filter_data(data, train_types, pbp_type, invert=False):
+        inc_types = set(data[pbp_type])
+        inc_types = filter(  # type: ignore
+            lambda x: x in train_types, inc_types
+        )
+        if invert:
+            return data.loc[~data[pbp_type].isin(list(inc_types))]
+        else:
+            return data.loc[data[pbp_type].isin(list(inc_types))]
 
-            pmen_types = filter(  # type: ignore
-                lambda x: x in cdc_types, pmen_types
+    for pbp in pbp_patterns:
+        pbp_type = f"{pbp}_type"
+        train_types = set(train[pbp_type])
+
+        # get closest type to all missing in the training data
+        if blosum_inference:
+            blosum_scores = parse_blosum_matrix()
+
+            pbp_seq = f"{pbp}_seq"
+            missing_types_and_sequences = pd.concat(
+                [
+                    filter_data(pmen, train_types, pbp_type, invert=True),
+                    filter_data(test, train_types, pbp_type, invert=True),
+                ]
+            )[[pbp_type, pbp_seq]].drop_duplicates()
+            training_types_and_sequences = train[
+                [pbp_type, pbp_seq]
+            ].drop_duplicates()
+
+            closest_types = missing_types_and_sequences.apply(
+                closest_blosum_sequence,
+                axis=1,
+                pbp=pbp,
+                training_types_and_sequences=training_types_and_sequences,
+                blosum_scores=blosum_scores,
             )
-            pmen = pmen.loc[pmen[pbp_type].isin(list(pmen_types))]
+            # apply returns a series of series' which needs to be unpacked
+            closest_types = pd.concat(closest_types.values)
 
-    cdc_encoded_sequences = encode_sequences(cdc, pbp_patterns, interactions)
+            def add_inferred_pbps(df):
+                df = df.merge(
+                    closest_types,
+                    left_on=pbp_type,
+                    right_on="original_type",
+                    how="left",
+                )
+                df[pbp_type].mask(
+                    ~df.inferred_type.isna(), df.inferred_type, inplace=True
+                )
+                df[pbp_seq].mask(
+                    ~df.inferred_type.isna(), df.inferred_seq, inplace=True
+                )
+                return df[train.columns]
+
+            pmen = add_inferred_pbps(pmen)
+            test = add_inferred_pbps(test)
+
+        # filter out everything which isnt in the training data
+        else:
+            pmen = filter_data(pmen, train_types, pbp_type)
+            test = filter_data(test, train_types, pbp_type)
+
+    if blosum_inference:
+        pmen["isolates"] = (
+            pmen["a1_type"] + "-" + pmen["b2_type"] + "-" + pmen["x2_type"]
+        )
+        test["isolates"] = (
+            test["a1_type"] + "-" + test["b2_type"] + "-" + test["x2_type"]
+        )
+
+    train_encoded_sequences = encode_sequences(
+        train, pbp_patterns, interactions
+    )
+    test_encoded_sequences = encode_sequences(test, pbp_patterns, interactions)
     pmen_encoded_sequences = encode_sequences(pmen, pbp_patterns, interactions)
 
     if adj_convolution:
         logging.info("Applying graph convolution")
-        cdc_adj = build_co_occurrence_graph(cdc, pbp_patterns)[0]
+        train_adj = build_co_occurrence_graph(train, pbp_patterns)[0]
+        test_adj = build_co_occurrence_graph(test, pbp_patterns)[0]
         pmen_adj = build_co_occurrence_graph(pmen, pbp_patterns)[0]
 
-        cdc_convolved_sequences = cdc_adj * cdc_encoded_sequences
+        train_convolved_sequences = train_adj * train_encoded_sequences
+        test_convolved_sequences = test_adj * test_encoded_sequences
         pmen_convolved_sequences = pmen_adj * pmen_encoded_sequences
 
+        X_train, y_train = train_convolved_sequences, train.log2_mic
+        X_test, y_test = test_convolved_sequences, test.log2_mic
+        X_validate, y_validate = pmen_convolved_sequences, pmen.log2_mic
     elif laplacian_convolution:
         logging.info("Applying graph convolution")
-        cdc_adj, cdc_deg = build_co_occurrence_graph(cdc, pbp_patterns)
+        train_adj, train_deg = build_co_occurrence_graph(train, pbp_patterns)
+        test_adj, test_deg = build_co_occurrence_graph(test, pbp_patterns)
         pmen_adj, pmen_deg = build_co_occurrence_graph(pmen, pbp_patterns)
 
-        cdc_laplacian = normed_laplacian(cdc_adj, cdc_deg)
+        train_laplacian = normed_laplacian(train_adj, train_deg)
+        test_laplacian = normed_laplacian(test_adj, test_deg)
         pmen_laplacian = normed_laplacian(pmen_adj, pmen_deg)
 
-        cdc_convolved_sequences = cdc_laplacian * cdc_encoded_sequences
+        train_convolved_sequences = train_laplacian * train_encoded_sequences
+        test_convolved_sequences = test_laplacian * test_encoded_sequences
         pmen_convolved_sequences = pmen_laplacian * pmen_encoded_sequences
-        X_train, X_test, y_train, y_test = train_test_split(
-            cdc_convolved_sequences,
-            cdc.log2_mic,
-            test_size=0.33,
-            random_state=0,
-        )
+
+        X_train, y_train = train_convolved_sequences, train.log2_mic
+        X_test, y_test = test_convolved_sequences, test.log2_mic
         X_validate, y_validate = pmen_convolved_sequences, pmen.log2_mic
     else:
-        X_train, X_test, y_train, y_test = train_test_split(
-            cdc_encoded_sequences, cdc.log2_mic, test_size=0.33, random_state=0
-        )
+        X_train, y_train = train_encoded_sequences, train.log2_mic
+        X_test, y_test = test_encoded_sequences, test.log2_mic
         X_validate, y_validate = pmen_encoded_sequences, pmen.log2_mic
 
     return (X_train, y_train), (X_test, y_test), (X_validate, y_validate)
+
+
+def save_output(results: ResultsContainer, filename: str, outdir: str):
+    if not os.path.isdir(outdir):
+        os.makedirs(outdir)
+
+    with open(os.path.join(outdir, filename), "wb") as a:
+        pickle.dump(results, a)
 
 
 def main():
@@ -192,7 +276,7 @@ def main():
     # model_type = "lasso"
 
     logging.info("Loading data")
-    train, test, validate = load_data(filter_pmen=True)
+    train, test, validate = load_data(blosum_inference=True)
 
     logging.info("Optimising the model for the test data accuracy")
     if model_type == "elastic_net":
