@@ -6,6 +6,7 @@ from functools import partial, lru_cache
 from typing import Tuple, Dict, Union
 
 import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import ElasticNet, Lasso
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
@@ -27,6 +28,15 @@ from utils import (
     parse_blosum_matrix,
     closest_blosum_sequence,
 )
+
+
+def _fit_rf(
+    train: Tuple[Union[csr_matrix, NDArray], NDArray], **kwargs
+) -> RandomForestRegressor:
+    kwargs = {k: round(v) for k, v in kwargs.items()}
+    reg = RandomForestRegressor(**kwargs)
+    reg.fit(train[0], train[1])
+    return reg
 
 
 def _fit_en(
@@ -60,6 +70,11 @@ def fit_model(
     model_type: str,
     **kwargs,
 ) -> Union[ElasticNet, Lasso]:
+    if model_type == "random_forest":
+        reg = _fit_rf(train, **kwargs)
+        return reg
+
+    # lasso and en models require iterative fitting
     max_iter = 100000
     fitted = False
     while not fitted:
@@ -271,18 +286,23 @@ def save_output(results: ResultsContainer, filename: str, outdir: str):
         pickle.dump(results, a)
 
 
-def main():
-    model_type = "elastic_net"
-    # model_type = "lasso"
+def main(model_type="elastic_net", blosum_inference=True):
 
     logging.info("Loading data")
-    train, test, validate = load_data(blosum_inference=True)
+    train, test, validate = load_data(blosum_inference=blosum_inference)
 
     logging.info("Optimising the model for the test data accuracy")
     if model_type == "elastic_net":
         pbounds = {"l1_ratio": [0.05, 0.95], "alpha": [0.05, 1.95]}
     elif model_type == "lasso":
         pbounds = {"alpha": [0.5, 1.5]}
+    elif model_type == "random_forest":
+        pbounds = {
+            "n_estimators": [1000, 10000],
+            "max_depth": [2, 5],
+            "min_samples_split": [2, 10],
+            "min_samples_leaf": [2, 2],
+        }
     else:
         raise NotImplementedError(model_type)
     optimizer = optimise_hps(
@@ -321,6 +341,13 @@ def main():
         model_type=model_type,
         model=model,
     )
+
+    outdir = f"results/{model_type}"
+    if blosum_inference:
+        filename = "results_blosum_inferred_pbp_types.pkl"
+    else:
+        filename = "results_filtered_pbp_types.pkl"
+    save_output(results, filename, outdir)
 
 
 if __name__ == "__main__":
