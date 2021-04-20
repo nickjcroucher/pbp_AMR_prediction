@@ -1,6 +1,5 @@
 import subprocess
 import logging
-from itertools import combinations
 from math import log2
 from typing import List, Tuple, Dict
 

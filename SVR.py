@@ -19,10 +19,6 @@ from parse_pbp_data import parse_cdc, parse_pmen
 from utils import accuracy, ResultsContainer, mean_acc_per_bin
 
 
-logging.basicConfig()
-logging.root.setLevel(logging.INFO)
-
-
 def format_inputs(
     data: pd.DataFrame, pbp_seqs: List[str]
 ) -> Tuple[NDArray, NDArray]:
@@ -256,3 +252,10 @@ def main():
 
     with open("Results/SVR_results.pkl", "wb") as a:
         pickle.dump(results, a)
+
+
+if __name__ == "__main__":
+    logging.basicConfig()
+    logging.root.setLevel(logging.INFO)
+
+    main()

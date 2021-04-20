@@ -19,9 +19,6 @@ from torch_model_utils import (
     write_epoch_results,
 )
 
-logging.basicConfig()
-logging.root.setLevel(logging.INFO)
-
 
 class LinearRegressor(nn.Module):
     def __init__(self, input_dimensions: int):
@@ -262,3 +259,10 @@ def main():
         verbose=True,
         **optimizer.max["params"],
     )
+
+
+if __name__ == "__main__":
+    logging.basicConfig()
+    logging.root.setLevel(logging.INFO)
+
+    main()

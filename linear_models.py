@@ -21,10 +21,6 @@ from parse_pbp_data import (
 from utils import accuracy, mean_acc_per_bin, ResultsContainer
 
 
-logging.basicConfig()
-logging.root.setLevel(logging.INFO)
-
-
 def _fit_en(
     train: Tuple[Union[csr_matrix, NDArray], NDArray],
     max_iter: int,
@@ -229,3 +225,10 @@ def main():
         model_type=model_type,
         model=model,
     )
+
+
+if __name__ == "__main__":
+    logging.basicConfig()
+    logging.root.setLevel(logging.INFO)
+
+    main()
