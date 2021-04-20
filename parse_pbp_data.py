@@ -9,10 +9,6 @@ from sklearn.preprocessing import OneHotEncoder
 from scipy import sparse
 
 
-logging.basicConfig()
-logging.root.setLevel(logging.INFO)
-
-
 def get_pbp_sequence(
     pbp_pattern: str, df: pd.DataFrame, cols: pd.Series
 ) -> pd.Series:
@@ -231,7 +227,8 @@ def encode_sequences(
         # def interact(encoded_seqs):
         #     seqs_1, seqs_2 = encoded_seqs
 
-        #     # if sequences are different length pad the shorter one with zeros
+        #     # if sequences are different length pad the shorter one
+        #     # with zeros
         #     length_difference = seqs_1.shape[1] - seqs_2.shape[1]
         #     if length_difference < 0:
         #         seqs_1 = np.array(
@@ -299,3 +296,10 @@ def main():
     pmen_adj, pmen_deg = build_co_occurrence_graph(
         pmen, pbp_patterns
     )  # noqa: F841
+
+
+if __name__ == "__main__":
+    logging.basicConfig()
+    logging.root.setLevel(logging.INFO)
+
+    main()
