@@ -140,6 +140,7 @@ def normed_laplacian(adj: csr_matrix, deg: csr_matrix) -> csr_matrix:
 
 @lru_cache(maxsize=1)
 def load_data(
+    *,
     blosum_inference: bool = False,
     adj_convolution: bool = False,
     laplacian_convolution: bool = False,
