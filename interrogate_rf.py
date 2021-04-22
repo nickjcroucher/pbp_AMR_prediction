@@ -7,98 +7,51 @@ from itertools import combinations
 import ray
 import numpy as np
 import pandas as pd
+from nptyping import NDArray, Int
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 from scipy.stats import fisher_exact
 from scipy.sparse import csr_matrix
 
+from parse_random_forest import DecisionTree_
 from models import load_data
 
 ray.init()
 
 
-def parse_decision_tree(
-    dt: DecisionTreeRegressor,
-) -> Dict[int, List[int, int]]:
-    """
-    Code taken from sklearn documentation:
-    https://scikit-learn.org/stable/auto_examples/tree/plot_unveil_tree_structure.html#tree-structure # noqa: E501
-    """
-    children_left = dt.tree_.children_left
-    children_right = dt.tree_.children_right
-    features = dt.tree_.feature
+def co_occuring_feature_pairs(trees: Dict):
 
-    tree = {}
-    stack = [0]  # start with the root node id (0)
-    while len(stack) > 0:
-        # `pop` ensures each node is only visited once
-        node_id = stack.pop()
+    # wont necessarily have every feature in the data in the model
+    tree_features = [tree["tree_features"] for tree in trees]
+    included_features = np.unique(np.concatenate(tree_features))
 
-        parent_feature = features[node_id]
+    linked_fps = {}
 
-        is_split_node = children_left[node_id] != children_right[node_id]
-        # If a split node, append left and right children to `stack`
-        if is_split_node:
-            stack.append(children_left[node_id])
-            stack.append(children_right[node_id])
-            child_left_feature = features[children_left[node_id]]
-            child_right_feature = features[children_right[node_id]]
-            tree.setdefault(parent_feature, []).append(child_left_feature)
-            tree.setdefault(parent_feature, []).append(child_right_feature)
+    def get_trees(fp):
+        fp_trees = [tree_feature_pairs(tree, fp) for tree in trees]
+        if fp_trees:
+            linked_fps[fp] = np.array(fp_trees)
 
-    return tree
+    feature_pairs = combinations(included_features, 2)
+    for fp in feature_pairs:
+        get_trees(fp)
 
-
-def tree_feature_pairs(tree: Dict, feature_pair: Tuple[int, int]) -> bool:
-    """
-    Are two features linked in the decision path of a tree
-    """
-    internal_nodes = tree.keys()
-
-    # check both nodes are actually in the tree
-    if not all([i in internal_nodes for i in feature_pair]):
-        return False
-
-    def traverse_tree(feature_pair):
-        def recursive_search(node):
-            children = tree[node]
-            if any([i == feature_pair[1] for i in children]):
-                return True
-            if all([i not in internal_nodes for i in children]):
-                return False
-            return any(
-                [
-                    recursive_search(child)
-                    for child in children
-                    if child in internal_nodes
-                ]
-            )
-
-        return recursive_search(feature_pair[0])
-
-    # start from first node and traverse down the tree
-    same_path = traverse_tree(sorted(feature_pair, reverse=False))
-    if same_path:
-        return True
-
-    # start from second node and traverse down the tree
-    same_path = traverse_tree(sorted(feature_pair, reverse=True))
-    if same_path:
-        return True
-
-    return False
+    # fp_trees = {
+    #     fp: np.array([tree_feature_pairs(tree, fp) for tree in trees])
+    #     for fp in feature_pairs
+    # }
 
 
 def paired_selection_frequency(
-    trees: List[Dict[int, List[int, int]]],
+    tree_features: List[NDArray[Int]],
+    included_features: NDArray[Int],
     multiple_test_correction: bool = True,
 ):
-    # features used in each tree in the rf
-    tree_features = [np.array(list(tree.keys())) for tree in trees]
-
-    # wont necessarily have every feature in the data in the model
-    included_features = np.unique(np.concatenate(tree_features))
-
+    """
+    tree_features: List of arrays which are the features on the internal nodes
+    of each tree
+    included_features: List of all the features which are present in any tree
+    """
     # df showing which features are in which tree
     feature_tree_matches = {i: [] for i in included_features}
     for feats in tree_features:
@@ -180,11 +133,12 @@ def load_model(
 
 def main():
     model = load_model()
-    trees = [parse_decision_tree(dt) for dt in model.estimators_]
-
     X_train, y_train = load_data()[0]
 
-    paired_selection_frequency(trees)
+    # extract each decision tree from the rf
+    trees = [DecisionTree_(dt) for dt in model.estimators_]
+
+    # paired_selection_frequency(tree_features, included_features)
 
 
 if __name__ == "__main__":
