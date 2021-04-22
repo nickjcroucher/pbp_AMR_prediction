@@ -10,6 +10,7 @@ from nptyping import NDArray, Int
 
 class DecisionTree_:
     def __init__(self, dt: DecisionTreeRegressor):
+        self.decision_tree = dt
         self.n_nodes = dt.tree_.node_count
         self.features = dt.tree_.feature
         self.tree: Dict[int, List[int]] = {}
@@ -88,33 +89,8 @@ class DecisionTree_:
 
         return False
 
-    def __eq__(self, other):
-        if not isinstance(other, type(self)):
-            return False
-
-        # check if attributes are the same length and then can safely check if
-        # all are equal using the numpy functions
-        if all(
-            [
-                len(self.tree) == len(other.tree),
-                len(self.leaf_idx) == len(other.leaf_idx),
-                len(self.internal_node_features)
-                == len(other.internal_node_features),
-            ]
-        ):
-
-            return all(
-                [
-                    self.tree == other.tree,
-                    (self.leaf_idx == other.leaf_idx).all(),
-                    (
-                        self.internal_node_features
-                        == other.internal_node_features
-                    ).all(),
-                ]
-            )
-        else:
-            return False
+    def __hash__(self):
+        return hash((self.decision_tree, self.n_nodes))
 
 
 def _co_occuring_feature_pairs(
