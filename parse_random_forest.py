@@ -1,5 +1,6 @@
 from typing import Union, Tuple, List, Dict
 from itertools import combinations
+from psutil import cpu_count
 
 import ray
 import numpy as np
@@ -116,28 +117,46 @@ class DecisionTree_:
             return False
 
 
+def _co_occuring_feature_pairs(
+    trees: List[DecisionTree_],
+    feature_pairs: List[Tuple[int, int]],
+) -> Dict[Tuple[int, int], List[DecisionTree_]]:
+
+    linked_fps = {
+        fp: [tree for tree in trees if tree.linked_features(fp)]
+        for fp in feature_pairs
+    }
+    return {k: v for k, v in linked_fps.items() if v}
+
+
+_co_occuring_feature_pairs_remote = ray.remote(_co_occuring_feature_pairs)
+
+
 def co_occuring_feature_pairs(
-    trees: List[DecisionTree_], included_features: NDArray[Int]
+    trees: List[DecisionTree_],
+    included_features: NDArray[Int],
+    parallel: bool = True,
 ) -> Dict[Tuple[int, int], List[DecisionTree_]]:
     """
-    Returns dictionary mapping pairs of features to trees in which ther are in
+    Returns dictionary mapping pairs of features to trees in which they are in
     the same decision path
     """
+    feature_pairs = list(combinations(included_features, 2))
 
-    linked_fps = {}
+    if parallel:
+        n_cpus = cpu_count()
+        futures = [
+            _co_occuring_feature_pairs_remote.remote(
+                trees, feature_pairs[i : i + n_cpus]
+            )
+            for i in range(0, len(feature_pairs), n_cpus)
+        ]
+        results = ray.get(futures)
 
-    def get_trees(fp):
-        fp_trees = [tree for tree in trees if tree.linked_features(fp)]
-        if fp_trees:
-            linked_fps[fp] = fp_trees
+        all_results = results[0]
+        for r in results[1:]:
+            all_results.update(r)
+        return all_results
 
-    feature_pairs = combinations(included_features, 2)
-    for fp in feature_pairs:
-        get_trees(fp)
-    return linked_fps
-
-    # linked_fps = {
-    #     fp: [tree for tree in trees if tree.linked_features(fp)]
-    #     for fp in feature_pairs
-    # }
-    # return {k: v for k, v in linked_fps.items() if v}
+    else:
+        return _co_occuring_feature_pairs(trees, feature_pairs)
