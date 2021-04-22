@@ -1,8 +1,9 @@
 import pickle
 import os
 import logging
-from typing import Dict, Tuple, List
+from typing import List, Tuple
 from itertools import combinations
+from operator import itemgetter
 
 import ray
 import numpy as np
@@ -11,22 +12,27 @@ from nptyping import NDArray, Int
 from sklearn.ensemble import RandomForestRegressor
 from scipy.stats import fisher_exact
 from scipy.sparse import csr_matrix
+from statsmodels.stats.multitest import multipletests
 
-from parse_random_forest import DecisionTree_
+from parse_random_forest import DecisionTree_, co_occuring_feature_pairs
 from models import load_data
-
-ray.init()
 
 
 def paired_selection_frequency(
     trees: List[DecisionTree_],
     included_features: NDArray[Int],
     multiple_test_correction: bool = True,
-):
+) -> List[Tuple[Tuple[int, int], float]]:
     """
     tree_features: List of arrays which are the features on the internal nodes
     of each tree
     included_features: List of all the features which are present in any tree
+    multiple_test_correction: Use Bonferroni method to correct for multiple
+    testing
+
+    Returns: list of tuples containing a pair of features and the p-value of
+    the fisher exact test which gives the probability of their paired selection
+    frequency under the null hypothesis
     """
     # df showing which features are in which tree
     feature_tree_matches = {i: [] for i in included_features}
@@ -40,12 +46,9 @@ def paired_selection_frequency(
         f_1 = feature_pair[0]
         f_2 = feature_pair[1]
 
-        N_12 = len(df.loc[df[f_2]].loc[df[f_2]])
-        if N_12 == 0:
-            return (f_1, f_2), None
-
         N_1 = len(df.loc[df[f_1]].loc[~df[f_2]])
         N_2 = len(df.loc[~df[f_1]].loc[df[f_2]])
+        N_12 = len(df.loc[df[f_2]].loc[df[f_2]])
         N_neither = len(df.loc[~df[f_1]].loc[~df[f_2]])
 
         # TODO: check alternative hypothesis
@@ -62,6 +65,16 @@ def paired_selection_frequency(
     ]
     fisher_test_p_values = ray.get(futures)
 
+    if multiple_test_correction:
+        corrected_p_values = multipletests(
+            [i[1] for i in fisher_test_p_values], method="bonferroni"
+        )[1]
+        fisher_test_p_values = [
+            (fisher_test_p_values[i][0], corrected_p_values[i])
+            for i in range(len(fisher_test_p_values))
+        ]
+
+    fisher_test_p_values.sort(key=itemgetter(1))  # return in order
     return fisher_test_p_values
 
 
@@ -84,7 +97,7 @@ def split_asymmetry(
     ]  # mean value of each node in the tree
 
 
-def selection_asymmetry(model: RandomForestRegressor):
+def selection_asymmetry():
     ...
 
 
@@ -119,11 +132,15 @@ def main():
         np.concatenate([tree.internal_node_features for tree in trees])
     )
 
-    paired_selection_frequency(trees, included_features)
+    paired_sf_p_values = paired_selection_frequency(trees, included_features)
+
+    linked_features = co_occuring_feature_pairs(trees, included_features)
 
 
 if __name__ == "__main__":
     logging.basicConfig()
     logging.root.setLevel(logging.INFO)
+
+    ray.init()
 
     main()
