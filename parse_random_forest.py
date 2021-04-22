@@ -1,7 +1,10 @@
 from typing import Union, Tuple, List, Dict
+from itertools import combinations
 
+import ray
 import numpy as np
 from sklearn.tree import DecisionTreeRegressor
+from nptyping import NDArray, Int
 
 
 class DecisionTree_:
@@ -41,6 +44,23 @@ class DecisionTree_:
         except IndexError:
             raise ValueError(f"{feature} not in tree")
 
+    def _traverse_tree(self, feature_1, feature_2):
+        def recursive_search(node):
+            children = self.tree[node]
+            if any([i == feature_2 for i in children]):
+                return True
+            if all([self.leaf_idx[i] for i in children]):
+                return False
+            return any(
+                [
+                    recursive_search(child)
+                    for child in children
+                    if not self.leaf_idx[child]
+                ]
+            )
+
+        return recursive_search(feature_1)
+
     def linked_features(self, feature_pair: Union[Tuple, List]) -> bool:
         """
         Are two features linked in the decision path of the tree?
@@ -52,33 +72,16 @@ class DecisionTree_:
         if not all([i in self.internal_node_features for i in feature_pair]):
             return False
 
-        def traverse_tree(feature_1, feature_2):
-            def recursive_search(node):
-                children = self.tree[node]
-                if any([i == feature_2 for i in children]):
-                    return True
-                if all([self.leaf_idx[i] for i in children]):
-                    return False
-                return any(
-                    [
-                        recursive_search(child)
-                        for child in children
-                        if not self.leaf_idx[child]
-                    ]
-                )
-
-            return recursive_search(feature_1)
-
         feature_1_id = self.get_feature_first_node_id(feature_pair[0])
         feature_2_id = self.get_feature_first_node_id(feature_pair[1])
 
         # start from first node and traverse down the tree
-        same_path = traverse_tree(feature_1_id, feature_2_id)
+        same_path = self._traverse_tree(feature_1_id, feature_2_id)
         if same_path:
             return True
 
         # start from second node and traverse down the tree
-        same_path = traverse_tree(feature_2_id, feature_1_id)
+        same_path = self._traverse_tree(feature_2_id, feature_1_id)
         if same_path:
             return True
 
@@ -88,6 +91,8 @@ class DecisionTree_:
         if not isinstance(other, type(self)):
             return False
 
+        # check if attributes are the same length and then can safely check if
+        # all are equal using the numpy functions
         if all(
             [
                 len(self.tree) == len(other.tree),
@@ -109,3 +114,30 @@ class DecisionTree_:
             )
         else:
             return False
+
+
+def co_occuring_feature_pairs(
+    trees: List[DecisionTree_], included_features: NDArray[Int]
+) -> Dict[Tuple[int, int], List[DecisionTree_]]:
+    """
+    Returns dictionary mapping pairs of features to trees in which ther are in
+    the same decision path
+    """
+
+    linked_fps = {}
+
+    def get_trees(fp):
+        fp_trees = [tree for tree in trees if tree.linked_features(fp)]
+        if fp_trees:
+            linked_fps[fp] = fp_trees
+
+    feature_pairs = combinations(included_features, 2)
+    for fp in feature_pairs:
+        get_trees(fp)
+    return linked_fps
+
+    # linked_fps = {
+    #     fp: [tree for tree in trees if tree.linked_features(fp)]
+    #     for fp in feature_pairs
+    # }
+    # return {k: v for k, v in linked_fps.items() if v}

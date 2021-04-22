@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 from nptyping import NDArray, Int
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.tree import DecisionTreeRegressor
 from scipy.stats import fisher_exact
 from scipy.sparse import csr_matrix
 
@@ -19,31 +18,8 @@ from models import load_data
 ray.init()
 
 
-def co_occuring_feature_pairs(trees: Dict):
-
-    # wont necessarily have every feature in the data in the model
-    tree_features = [tree["tree_features"] for tree in trees]
-    included_features = np.unique(np.concatenate(tree_features))
-
-    linked_fps = {}
-
-    def get_trees(fp):
-        fp_trees = [tree_feature_pairs(tree, fp) for tree in trees]
-        if fp_trees:
-            linked_fps[fp] = np.array(fp_trees)
-
-    feature_pairs = combinations(included_features, 2)
-    for fp in feature_pairs:
-        get_trees(fp)
-
-    # fp_trees = {
-    #     fp: np.array([tree_feature_pairs(tree, fp) for tree in trees])
-    #     for fp in feature_pairs
-    # }
-
-
 def paired_selection_frequency(
-    tree_features: List[NDArray[Int]],
+    trees: List[DecisionTree_],
     included_features: NDArray[Int],
     multiple_test_correction: bool = True,
 ):
@@ -54,9 +30,9 @@ def paired_selection_frequency(
     """
     # df showing which features are in which tree
     feature_tree_matches = {i: [] for i in included_features}
-    for feats in tree_features:
+    for tree in trees:
         for i in included_features:
-            feature_tree_matches[i].append(i in feats)
+            feature_tree_matches[i].append(i in tree.internal_node_features)
     tree_features_df = pd.DataFrame(feature_tree_matches)
 
     @ray.remote
@@ -138,7 +114,12 @@ def main():
     # extract each decision tree from the rf
     trees = [DecisionTree_(dt) for dt in model.estimators_]
 
-    # paired_selection_frequency(tree_features, included_features)
+    # get all the features which were included in the model
+    included_features = np.unique(
+        np.concatenate([tree.internal_node_features for tree in trees])
+    )
+
+    paired_selection_frequency(trees, included_features)
 
 
 if __name__ == "__main__":
