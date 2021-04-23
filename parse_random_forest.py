@@ -62,9 +62,19 @@ class DecisionTree_:
 
         return recursive_search(feature_1)
 
-    def linked_features(self, feature_pair: Union[Tuple, List]) -> bool:
+    def linked_features(
+        self,
+        feature_pair: Union[Tuple, List],
+        *,
+        both_permutations: bool = False,
+    ) -> bool:
         """
         Are two features linked in the decision path of the tree?
+        feature_pair: Tuple or list containing two features in the tree
+        both_permutations: If False (default) will start with the first item of
+            feature_pair and traverse the tree looking for the second item
+            only. If True will search for features appearing in the opposite
+            order as well and will return True if it finds either permutation
         """
         if len(feature_pair) != 2:
             raise ValueError("feature pair must contain two valid node ids")
@@ -81,10 +91,11 @@ class DecisionTree_:
         if same_path:
             return True
 
-        # start from second node and traverse down the tree
-        same_path = self._traverse_tree(feature_2_id, feature_1_id)
-        if same_path:
-            return True
+        if both_permutations:
+            # start from second node and traverse down the tree
+            same_path = self._traverse_tree(feature_2_id, feature_1_id)
+            if same_path:
+                return True
 
         return False
 
@@ -104,13 +115,21 @@ def valid_feature_pair(feature_1, feature_2, *, alphabet_size=20):
 
 def _co_occuring_feature_pairs(
     trees: List[DecisionTree_],
-    feature_pairs: List[Tuple[int, int]],
-) -> Dict[Tuple[int, int], List[DecisionTree_]]:
+    feature_pairs: List[Tuple[int]],
+) -> Dict[Tuple[int], List[DecisionTree_]]:
+    def relevant_trees(fp):
+        return [
+            tree
+            for tree in trees
+            if tree.linked_features(fp, both_permutations=False)
+        ]
 
-    linked_fps = {
-        fp: [tree for tree in trees if tree.linked_features(fp)]
-        for fp in feature_pairs
-    }
+    # checking for appearance of feature pair in each tree in each order
+    fps_order_1 = [tuple(sorted(fp, reverse=True)) for fp in feature_pairs]
+    fps_order_2 = [tuple(sorted(fp, reverse=False)) for fp in feature_pairs]
+    linked_fps = {fp: relevant_trees(fp) for fp in fps_order_1}
+    linked_fps.update({fp: relevant_trees(fp) for fp in fps_order_2})
+
     return {k: v for k, v in linked_fps.items() if v}
 
 
@@ -119,9 +138,9 @@ _co_occuring_feature_pairs_remote = ray.remote(_co_occuring_feature_pairs)
 
 def co_occuring_feature_pairs(
     trees: List[DecisionTree_],
-    feature_pairs: List[Tuple[int, int]],
-    parallel: bool = True,
-) -> Dict[Tuple[int, int], List[DecisionTree_]]:
+    feature_pairs: List[Tuple[int]],
+    parallel: bool = False,
+) -> Dict[Tuple[int], List[DecisionTree_]]:
     """
     Returns dictionary mapping pairs of features to trees in which they are in
     the same decision path
