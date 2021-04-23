@@ -15,12 +15,17 @@ from sklearn.ensemble import RandomForestRegressor
 from statsmodels.stats.multitest import multipletests
 
 from models import load_data
-from parse_random_forest import DecisionTree_, co_occuring_feature_pairs
+from parse_random_forest import (
+    DecisionTree_,
+    co_occuring_feature_pairs,
+    valid_feature_pair,
+)
 
 
 def paired_selection_frequency(
     trees: List[DecisionTree_],
     included_features: NDArray[Int],
+    feature_combinations: List[Tuple[int, int]],
     multiple_test_correction: bool = True,
 ) -> List[Tuple[Tuple[int, int], float]]:
     """
@@ -35,6 +40,7 @@ def paired_selection_frequency(
     frequency under the null hypothesis
     """
     # df showing which features are in which tree
+    logging.info("Matching features to trees")
     feature_tree_matches = {i: [] for i in included_features}
     for tree in trees:
         for i in included_features:
@@ -57,10 +63,13 @@ def paired_selection_frequency(
 
         return (f_1, f_2), p_value
 
+    logging.info(
+        "Performing fishers exact test for paired selection frequency of each pair of features"
+    )  # noqa: E501
     # calculates paired selection frequencies in parallel
     futures = [
         paired_selection_frequency_.remote(feature_pair, tree_features_df)
-        for feature_pair in combinations(included_features, 2)
+        for feature_pair in feature_combinations
     ]
     fisher_test_p_values = ray.get(futures)
 
@@ -78,10 +87,13 @@ def paired_selection_frequency(
 
 
 def split_asymmetry(
-    model: RandomForestRegressor, X_train: csr_matrix, y_train: pd.Series
+    trees: List[DecisionTree_], X_train: csr_matrix, y_train: pd.Series
 ):
     y_train = y_train.values
-    decision_paths = [i.decision_path(X_train) for i in model.estimators_]
+    logging.info("Caculating decision paths for each tree")
+    decision_paths = [
+        i.decision_tree.decision_path(X_train).todense() for i in trees
+    ]
     decision_paths = [
         np.array(i, dtype=bool) for i in decision_paths
     ]  # convert to boolean array to make downstream processing easier
@@ -97,6 +109,10 @@ def split_asymmetry(
 
 
 def selection_asymmetry():
+    ...
+
+
+def ensemble_model():
     ...
 
 
@@ -131,7 +147,15 @@ def main():
         np.concatenate([tree.internal_node_features for tree in trees])
     )
 
-    paired_sf_p_values = paired_selection_frequency(trees, included_features)
+    # extract potentially interacting pairs of features
+    feature_pairs = list(combinations(included_features, 2))
+    feature_pairs = [
+        fp for fp in feature_pairs if valid_feature_pair(*fp, alphabet_size=20)
+    ]
+
+    paired_sf_p_values = paired_selection_frequency(
+        trees, included_features, feature_pairs
+    )
 
     linked_features = co_occuring_feature_pairs(trees, included_features)
 

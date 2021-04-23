@@ -1,9 +1,8 @@
-from itertools import combinations
+from math import ceil
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import ray
-from nptyping import Int, NDArray
 from psutil import cpu_count
 from sklearn.tree import DecisionTreeRegressor
 
@@ -93,6 +92,16 @@ class DecisionTree_:
         return hash((self.decision_tree, self.n_nodes))
 
 
+def valid_feature_pair(feature_1, feature_2, *, alphabet_size=20):
+    """
+    If features are a one hot encoding of a sequence, it does not
+    make sense to ask if two features at the same locus are interacting.
+    """
+    return ceil((feature_1 + 1) / alphabet_size) != ceil(
+        (feature_2 + 1) / alphabet_size
+    )
+
+
 def _co_occuring_feature_pairs(
     trees: List[DecisionTree_],
     feature_pairs: List[Tuple[int, int]],
@@ -110,15 +119,13 @@ _co_occuring_feature_pairs_remote = ray.remote(_co_occuring_feature_pairs)
 
 def co_occuring_feature_pairs(
     trees: List[DecisionTree_],
-    included_features: NDArray[Int],
+    feature_pairs: List[Tuple[int, int]],
     parallel: bool = True,
 ) -> Dict[Tuple[int, int], List[DecisionTree_]]:
     """
     Returns dictionary mapping pairs of features to trees in which they are in
     the same decision path
     """
-    feature_pairs = list(combinations(included_features, 2))
-
     if parallel:
         n_cpus = cpu_count()
         futures = [
