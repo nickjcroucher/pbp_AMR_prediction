@@ -1,32 +1,32 @@
-import pickle
-import os
 import logging
+import os
+import pickle
 import warnings
-from functools import partial, lru_cache
-from typing import Tuple, Dict, Union
+from functools import lru_cache, partial
+from typing import Dict, Tuple, Union
 
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import ElasticNet, Lasso
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
-from sklearn.exceptions import ConvergenceWarning
 from bayes_opt import BayesianOptimization
 from nptyping import NDArray
 from scipy.sparse import csr_matrix
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.exceptions import ConvergenceWarning
+from sklearn.linear_model import ElasticNet, Lasso
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
 
 from parse_pbp_data import (
+    build_co_occurrence_graph,
+    encode_sequences,
     parse_cdc,
     parse_pmen,
-    encode_sequences,
-    build_co_occurrence_graph,
 )
 from utils import (
-    accuracy,
-    mean_acc_per_bin,
     ResultsContainer,
-    parse_blosum_matrix,
+    accuracy,
     closest_blosum_sequence,
+    mean_acc_per_bin,
+    parse_blosum_matrix,
 )
 
 

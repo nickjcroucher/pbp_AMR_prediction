@@ -1,21 +1,21 @@
-import pickle
-import os
 import logging
-from typing import List, Tuple
+import os
+import pickle
 from itertools import combinations
 from operator import itemgetter
+from typing import List, Tuple
 
-import ray
 import numpy as np
 import pandas as pd
-from nptyping import NDArray, Int
-from sklearn.ensemble import RandomForestRegressor
-from scipy.stats import fisher_exact
+import ray
+from nptyping import Int, NDArray
 from scipy.sparse import csr_matrix
+from scipy.stats import fisher_exact
+from sklearn.ensemble import RandomForestRegressor
 from statsmodels.stats.multitest import multipletests
 
-from parse_random_forest import DecisionTree_, co_occuring_feature_pairs
 from models import load_data
+from parse_random_forest import DecisionTree_, co_occuring_feature_pairs
 
 
 def paired_selection_frequency(
@@ -51,7 +51,6 @@ def paired_selection_frequency(
         N_12 = len(df.loc[df[f_2]].loc[df[f_2]])
         N_neither = len(df.loc[~df[f_1]].loc[~df[f_2]])
 
-        # TODO: check alternative hypothesis
         p_value = fisher_exact(
             [[N_12, N_1], [N_2, N_neither]], alternative="greater"
         )[1]

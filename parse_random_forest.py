@@ -1,11 +1,11 @@
-from typing import Union, Tuple, List, Dict
 from itertools import combinations
-from psutil import cpu_count
+from typing import Dict, List, Tuple, Union
 
-import ray
 import numpy as np
+import ray
+from nptyping import Int, NDArray
+from psutil import cpu_count
 from sklearn.tree import DecisionTreeRegressor
-from nptyping import NDArray, Int
 
 
 class DecisionTree_:
