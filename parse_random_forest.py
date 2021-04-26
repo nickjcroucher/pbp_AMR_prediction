@@ -38,6 +38,7 @@ class DecisionTree_:
                 self.leaf_idx[node_id] = True
 
         self.internal_node_features = self.features[~self.leaf_idx]
+        self._hash = hash((self.decision_tree, self.n_nodes))
 
     def get_feature_first_node_id(self, feature: int):
         try:
@@ -100,7 +101,7 @@ class DecisionTree_:
         return False
 
     def __hash__(self):
-        return hash((self.decision_tree, self.n_nodes))
+        return self._hash
 
 
 def valid_feature_pair(feature_1, feature_2, *, alphabet_size=20):

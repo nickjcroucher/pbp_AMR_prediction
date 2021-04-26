@@ -3,18 +3,16 @@ import os
 import pickle
 from itertools import combinations
 from operator import itemgetter
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 import numpy as np
 import pandas as pd
 import ray
 from nptyping import Int, NDArray
-from scipy.sparse import csr_matrix
-from scipy.stats import fisher_exact
+from scipy.stats import fisher_exact, ttest_ind
 from sklearn.ensemble import RandomForestRegressor
 from statsmodels.stats.multitest import multipletests
 
-from models import load_data
 from parse_random_forest import (
     DecisionTree_,
     co_occuring_feature_pairs,
@@ -22,12 +20,24 @@ from parse_random_forest import (
 )
 
 
+def bonferroni_correction(
+    p_values: List[Tuple[Tuple[int], float]]
+) -> List[Tuple[Tuple[int], float]]:
+    corrected_p_values = multipletests(
+        [i[1] for i in p_values], method="bonferroni"
+    )[1]
+    p_values = [
+        (p_values[i][0], corrected_p_values[i]) for i in range(len(p_values))
+    ]
+    return p_values
+
+
 def paired_selection_frequency(
     trees: List[DecisionTree_],
     included_features: NDArray[Int],
     feature_combinations: List[Tuple[int, int]],
     multiple_test_correction: bool = True,
-) -> List[Tuple[Tuple[int, int], float]]:
+) -> List[Tuple[Tuple[int], float]]:
     """
     tree_features: List of arrays which are the features on the internal nodes
     of each tree
@@ -64,8 +74,8 @@ def paired_selection_frequency(
         return (f_1, f_2), p_value
 
     logging.info(
-        "Performing fishers exact test for paired selection frequency of each pair of features"
-    )  # noqa: E501
+        "Performing fishers exact test for paired selection frequency of each pair of features"  # noqa: E501
+    )
     # calculates paired selection frequencies in parallel
     futures = [
         paired_selection_frequency_.remote(feature_pair, tree_features_df)
@@ -74,41 +84,101 @@ def paired_selection_frequency(
     fisher_test_p_values = ray.get(futures)
 
     if multiple_test_correction:
-        corrected_p_values = multipletests(
-            [i[1] for i in fisher_test_p_values], method="bonferroni"
-        )[1]
-        fisher_test_p_values = [
-            (fisher_test_p_values[i][0], corrected_p_values[i])
-            for i in range(len(fisher_test_p_values))
-        ]
+        fisher_test_p_values = bonferroni_correction(fisher_test_p_values)
 
     fisher_test_p_values.sort(key=itemgetter(1))  # return in order
     return fisher_test_p_values
 
 
 def split_asymmetry(
-    trees: List[DecisionTree_], X_train: csr_matrix, y_train: pd.Series
+    linked_features: Dict[Tuple[int], List[DecisionTree_]],
+    multiple_test_correction: bool = True,
+) -> List[Tuple[Tuple[int], float]]:
+    # need at least five slopes to calculate t statistic
+    candidate_fps = {k: v for k, v in linked_features.items() if len(v) >= 5}
+
+    def get_slope(fp, tree):
+        # check second feature appears at least twice
+        if len(np.where(tree.features == fp[1])[0]) < 2:
+            return None
+
+        fp_1 = tree.get_feature_first_node_id(fp[0])
+        left_child = tree.decision_tree.tree_.children_left[fp_1]
+        right_child = tree.decision_tree.tree_.children_right[fp_1]
+        if any((tree.leaf_idx[left_child], tree.leaf_idx[right_child])):
+            return None
+
+        # nodes split on second feature
+        all_fp_2 = np.where(tree.features == fp[1])[0]
+
+        # get nodes of second feature on left hand side of first feature
+        left_fp_2_loc = []
+        for fp_2 in all_fp_2:
+            # TODO: remove _ from method
+            if tree._traverse_tree(left_child, fp_2):
+                left_fp_2_loc.append(fp_2)
+        if len(left_fp_2_loc) == 0:
+            return None
+
+        # get nodes of second feature on right hand side of first feature
+        all_fp_2 = [i for i in all_fp_2 if i not in left_fp_2_loc]
+        right_fp_2_loc = []
+        for fp_2 in all_fp_2:
+            if tree._traverse_tree(right_child, fp_2):
+                left_fp_2_loc.append(fp_2)
+        if len(right_fp_2_loc) == 0:
+            return None
+
+        # TODO: move to class definition
+        node_values = tree.decision_tree.tree_.value.squeeze()
+
+        slope_1 = (
+            node_values[
+                tree.decision_tree.tree_.children_left[left_fp_2_loc[0]]
+            ]
+            - node_values[
+                tree.decision_tree.tree_.children_right[left_fp_2_loc[0]]
+            ]
+        )
+        slope_2 = (
+            node_values[
+                tree.decision_tree.tree_.children_left[right_fp_2_loc[0]]
+            ]
+            - node_values[
+                tree.decision_tree.tree_.children_right[right_fp_2_loc[0]]
+            ]
+        )
+
+        return slope_1, slope_2
+
+    # get slopes for each feature pair where second feature appears on either
+    # side of the first
+    fp_slopes = {}
+    for fp, linked_trees in candidate_fps.items():
+        slopes = [get_slope(fp, tree) for tree in linked_trees]
+        slopes = [i for i in slopes if i is not None]
+        if len(slopes) >= 5:
+            fp_slopes[fp] = slopes
+
+    # ttest p value for each
+    ttest_p_values = []
+    for fp, slopes in fp_slopes.items():
+        left_slopes = [i[0] for i in slopes]
+        right_slopes = [i[1] for i in slopes]
+        ttest_p_values.append(
+            (fp, ttest_ind(left_slopes, right_slopes, equal_var=False)[1])
+        )
+
+    if multiple_test_correction and ttest_p_values:
+        ttest_p_values = bonferroni_correction(ttest_p_values)
+
+    ttest_p_values.sort(key=itemgetter(1))
+    return ttest_p_values
+
+
+def selection_asymmetry(
+    linked_features: Dict[Tuple[int], List[DecisionTree_]]
 ):
-    y_train = y_train.values
-    logging.info("Caculating decision paths for each tree")
-    decision_paths = [
-        i.decision_tree.decision_path(X_train).todense() for i in trees
-    ]
-    decision_paths = [
-        np.array(i, dtype=bool) for i in decision_paths
-    ]  # convert to boolean array to make downstream processing easier
-
-    def mean_node_value(node, y_train):
-        values = y_train[node]
-        return sum(values) / len(values)
-
-    node_values = [
-        np.apply_along_axis(mean_node_value, 0, dp, y_train)
-        for dp in decision_paths
-    ]  # mean value of each node in the tree
-
-
-def selection_asymmetry():
     ...
 
 
@@ -137,7 +207,6 @@ def load_model(
 
 def main():
     model = load_model()
-    X_train, y_train = load_data()[0]
 
     # extract each decision tree from the rf
     trees = [DecisionTree_(dt) for dt in model.estimators_]
@@ -153,11 +222,14 @@ def main():
         fp for fp in feature_pairs if valid_feature_pair(*fp, alphabet_size=20)
     ]
 
+    # trees in which each pair of features are linked in the decision path
+    linked_features = co_occuring_feature_pairs(trees, feature_pairs)
+
     paired_sf_p_values = paired_selection_frequency(
         trees, included_features, feature_pairs
     )
-
-    linked_features = co_occuring_feature_pairs(trees, included_features)
+    split_asymmetry_p_values = split_asymmetry(linked_features)
+    sel_asymmetry_p_values = selection_asymmetry(linked_features)
 
 
 if __name__ == "__main__":
