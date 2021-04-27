@@ -6,6 +6,7 @@ from functools import lru_cache, partial
 from typing import Dict, Tuple, Union
 
 import pandas as pd
+import numpy as np
 from bayes_opt import BayesianOptimization
 from nptyping import NDArray
 from scipy.sparse import csr_matrix
@@ -141,10 +142,10 @@ def normed_laplacian(adj: csr_matrix, deg: csr_matrix) -> csr_matrix:
 @lru_cache(maxsize=1)
 def load_data(
     *,
+    interactions: Tuple[Tuple[int]] = None,
     blosum_inference: bool = False,
     adj_convolution: bool = False,
     laplacian_convolution: bool = False,
-    interactions: bool = False,
 ) -> Tuple[
     Tuple[csr_matrix, pd.Series],
     Tuple[csr_matrix, pd.Series],
@@ -155,8 +156,10 @@ def load_data(
             "Only one of adj_convolution or laplacian_convolution can be used"
         )
 
-    cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
-    pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
+    cdc = pd.read_csv("cdc_seqs_df.csv")
+    pmen = pd.read_csv("pmen_pbp_profiles_extended.csv")
+    # cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
+    # pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
 
     pbp_patterns = ["a1", "b2", "x2"]
 
@@ -235,11 +238,9 @@ def load_data(
             test["a1_type"] + "-" + test["b2_type"] + "-" + test["x2_type"]
         )
 
-    train_encoded_sequences = encode_sequences(
-        train, pbp_patterns, interactions
-    )
-    test_encoded_sequences = encode_sequences(test, pbp_patterns, interactions)
-    pmen_encoded_sequences = encode_sequences(pmen, pbp_patterns, interactions)
+    train_encoded_sequences = encode_sequences(train, pbp_patterns)
+    test_encoded_sequences = encode_sequences(test, pbp_patterns)
+    pmen_encoded_sequences = encode_sequences(pmen, pbp_patterns)
 
     if adj_convolution:
         logging.info("Applying graph convolution")
@@ -276,6 +277,18 @@ def load_data(
         X_test, y_test = test_encoded_sequences, test.log2_mic
         X_validate, y_validate = pmen_encoded_sequences, pmen.log2_mic
 
+    def interact(data, interacting_features):
+        interacting_features = np.concatenate(
+            [np.multiply(data[:, i[0]], data[:, i[1]]) for i in interactions],
+            axis=1,
+        )
+        return csr_matrix(np.concatenate([data, interacting_features], axis=1))
+
+    if interactions is not None:
+        X_train = interact(X_train.todense(), interactions)
+        X_test = interact(X_test.todense(), interactions)
+        X_validate = interact(X_validate.todense(), interactions)
+
     return (X_train, y_train), (X_test, y_test), (X_validate, y_validate)
 
 
@@ -296,7 +309,7 @@ def main(model_type="elastic_net", blosum_inference=True):
     if model_type == "elastic_net":
         pbounds = {"l1_ratio": [0.05, 0.95], "alpha": [0.05, 1.95]}
     elif model_type == "lasso":
-        pbounds = {"alpha": [0.5, 1.5]}
+        pbounds = {"alpha": [0.05, 1.95]}
     elif model_type == "random_forest":
         pbounds = {
             "n_estimators": [1000, 10000],

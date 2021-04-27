@@ -160,6 +160,11 @@ def split_asymmetry(
         if len(slopes) >= 5:
             fp_slopes[fp] = slopes
 
+    if len(fp_slopes) == 0:
+        logging.warning(
+            "Insufficient asymmetric splits to perform t test for any pair of features"  # noqa: E501
+        )
+
     # ttest p value for each
     ttest_p_values = []
     for fp, slopes in fp_slopes.items():
@@ -229,7 +234,7 @@ def main():
         trees, included_features, feature_pairs
     )
     split_asymmetry_p_values = split_asymmetry(linked_features)
-    sel_asymmetry_p_values = selection_asymmetry(linked_features)
+    selection_asymmetry_p_values = selection_asymmetry(linked_features)
 
 
 if __name__ == "__main__":
