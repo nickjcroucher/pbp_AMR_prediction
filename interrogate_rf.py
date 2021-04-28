@@ -2,8 +2,9 @@ import logging
 import os
 import pickle
 from itertools import combinations
+from math import ceil
 from operator import itemgetter
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -18,6 +19,45 @@ from parse_random_forest import (
     co_occuring_feature_pairs,
     valid_feature_pair,
 )
+
+
+# TODO: come back to this
+def plot_feature_importances(model: RandomForestRegressor):
+    # protein lengths for plotting
+    a1_length = 277
+    b2_length = 278
+    x2_length = 359
+
+    feature_idx = np.where(model.feature_importances_ != 0)[0]
+    feature_scores = model.feature_importances_[
+        feature_idx
+    ]  # total reduction in cost function for each feature
+
+    # map each feature (SNP) to locus
+    loci_mapper = {i: ceil((i + 1) / 20) for i in feature_idx}
+    df = pd.DataFrame(
+        {"feature_idx": feature_idx, "feature_scores": feature_scores}
+    )
+    df["locus"] = df.feature_idx.apply(lambda x: loci_mapper[x])
+
+    all_feature_scores = np.zeros(sum((a1_length, b2_length, x2_length)))
+    for i, d in df.groupby(df.locus):
+        all_feature_scores[i] = d.feature_scores.mean()
+
+    # non-zero scores all on positive logarithmic scale
+    log_feature_scores = np.array(
+        [np.log10(i) if i != 0 else i for i in all_feature_scores]
+    )
+    relative_feature_scores = [
+        i + abs(log_feature_scores.min()) + 1 if i != 0 else i
+        for i in log_feature_scores
+    ]
+
+    a1_feature_scores = relative_feature_scores[:a1_length]
+    b2_feature_scores = relative_feature_scores[
+        a1_length : (a1_length + b2_length)
+    ]
+    x2_feature_scores = relative_feature_scores[(a1_length + b2_length) :]
 
 
 def bonferroni_correction(

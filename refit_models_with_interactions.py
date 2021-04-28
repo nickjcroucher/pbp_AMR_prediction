@@ -3,13 +3,12 @@ import pickle
 from functools import lru_cache
 from math import ceil
 from random import choice
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from nptyping import NDArray
 from scipy.sparse import csr_matrix
 from sklearn.linear_model import Lasso
 from sklearn.metrics import mean_squared_error
@@ -125,7 +124,6 @@ def random_interaction_model_fits(n: int, model_type: str = "lasso") -> float:
     test_predictions = model.predict(test[0])
 
     MSE = mean_squared_error(test[1], test_predictions)
-    print(MSE)
     return MSE
 
 
@@ -235,6 +233,8 @@ def main():
     plot_simulations(
         results.model.sparse_coef_.count_nonzero(), results.testing_MSE
     )
+    compare_interaction_model_with_rf(results)
+    plot_interactions(results.model, interactions)
 
 
 if __name__ == "__main__":
