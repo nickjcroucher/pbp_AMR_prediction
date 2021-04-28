@@ -1,3 +1,4 @@
+import warnings
 from itertools import compress
 from math import ceil
 from typing import Dict, List, Tuple, Union
@@ -138,43 +139,46 @@ def _co_occuring_feature_pairs(
 _co_occuring_feature_pairs_remote = ray.remote(_co_occuring_feature_pairs)
 
 
-JL_INITIALISED = False
+class jl_api:
+    def __init__(self):
+        from julia.api import Julia
+
+        Julia(compiled_modules=False)
+        from julia import (  # noqa: E402 # pylint: disable=no-name-in-module
+            Main,
+        )
+
+        self.jl_main = Main
+        self.jl_main.eval('include("co_occuring_feature_pairs.jl")')
+        self.jl_main.eval("using .ParseRF")
+
+
+JL_API = None
 
 
 def _jl_co_occuring_feature_pairs(
     trees: List[DecisionTree_], feature_pairs: List[Tuple[int]]
 ) -> Dict[Tuple[int], List[DecisionTree_]]:
 
-    global JL_INITIALISED
-    if not JL_INITIALISED:
-        from julia.api import Julia
-
-        Julia(compiled_modules=False)
-        from julia import (  # noqa: E402 # pylint: disable=no-name-in-module
-            Main as jl_main,
-        )
-
-        jl_main.eval('include("pyjulia_test.jl")')
-        jl_main.eval("using .ParseRF")
-
-        JL_INITIALISED = True
+    global JL_API
+    if JL_API is None:
+        JL_API = jl_api()  # initialise pyjulia interface
 
     trees_ = [
         (i.features, i.tree, i.leaf_idx, i.internal_node_features)
         for i in trees
     ]
-    linked_feature_trees = jl_main.ParseRF.co_occuring_feature_pairs(
+    linked_fps = JL_API.jl_main.ParseRF.co_occuring_feature_pairs(
         trees_, feature_pairs
     )
-
-    return {
-        k: list(compress(trees, v)) for k, v in linked_feature_trees.items()
-    }
+    linked_fps = {k: list(compress(trees, v)) for k, v in linked_fps.items()}
+    return {k: v for k, v in linked_fps.items() if v}
 
 
 def co_occuring_feature_pairs(
     trees: List[DecisionTree_],
     feature_pairs: List[Tuple[int]],
+    *,
     parallel: bool = False,
     use_julia: bool = False,
 ) -> Dict[Tuple[int], List[DecisionTree_]]:
@@ -182,6 +186,11 @@ def co_occuring_feature_pairs(
     Returns dictionary mapping pairs of features to trees in which they are in
     the same decision path
     """
+    if use_julia and parallel:
+        warnings.warn(  # noqa: E501
+            "use_julia and parallel are both set to True, use_julia will take preference"
+        )
+
     if use_julia:
         return _jl_co_occuring_feature_pairs(trees, feature_pairs)
 

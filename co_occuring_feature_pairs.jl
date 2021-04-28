@@ -1,5 +1,5 @@
 module ParseRF
-export co_occuring_feature_pairs, test
+export co_occuring_feature_pairs
 
 
 struct decision_tree
@@ -9,6 +9,14 @@ struct decision_tree
     internal_node_features::Vector{Int64}
 end
 
+
+function re_index_tree(tree)
+    d = Dict()
+    for (key, value) in tree
+        d[key + 1] = value .+ 1
+    end
+    return d
+end
 
 function traverse_tree(
     feature_1::Int64, 
@@ -43,8 +51,15 @@ function linked_features(
     feature_1_id = findall(tree.features .== feature_pair[1])[1]
     feature_2_id = findall(tree.features .== feature_pair[2])[1]
 
-    # start from first node and walk down the tree
-    same_path = traverse_tree(feature_1_id, feature_2_id, tree)
+    try
+        # start from first node and walk down the tree
+        same_path = traverse_tree(feature_1_id, feature_2_id, tree)
+    catch ex
+        println(feature_pair)
+        println(tree)
+        throw(ex)
+    end
+
     if same_path
         return true
     end
@@ -78,31 +93,28 @@ function co_occuring_feature_pairs(
     feature_pairs
 )
     # pyjulia reads list of lists as vector of tuples, need to convert 
-    # tuples to vectors
-    feature_pairs = [[i for i in j] for j in feature_pairs]
-
-    # group as a decision_tree object
+    # tuples to vectors. Also sort at the same time
+    feature_pairs = [sort([i for i in j]) for j in feature_pairs]
+    reverse_feature_pairs = [reverse(j) for j in feature_pairs]
+    
+    # group as a julia decision_tree struct
     trees = [
-        decision_tree(tree[1], tree[2], tree[3], tree[4]) for tree in trees
+        decision_tree(tree[1], re_index_tree(tree[2]), tree[3], tree[4]) 
+        for tree in trees
     ]
 
-    for fp in feature_pairs
-        sort!(fp)
-    end
     tree_idx_1 = relevant_trees(trees, feature_pairs)
-
-    for fp in feature_pairs
-        reverse!(fp)
+    tree_idx_2 = relevant_trees(trees, reverse_feature_pairs)
+    all_fp_tree_matches = merge(tree_idx_1, tree_idx_2) # combine
+    
+    # keys as tuples so can be converted back to python dict. vectors are 
+    # converted to numpy arrays which are unhashable
+    output = Dict()
+    for (key, value) in all_fp_tree_matches
+        output[Tuple(Int64(x) for x in key)] = value
     end
-    tree_idx_2 = relevant_trees(trees, feature_pairs)
 
-    return vcat(tree_idx_1, tree_idx_2)
-end
-
-function test(a, b)
-    println(typeof(a))
-    println(typeof(b))
-    sort!(b)
+    return output
 end
 
 end
