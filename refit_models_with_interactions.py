@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from nptyping import NDArray
 from scipy.sparse import csr_matrix
@@ -19,19 +20,65 @@ from parse_random_forest import DecisionTree_, valid_feature_pair
 from utils import ResultsContainer, accuracy, mean_acc_per_bin
 
 
-def map_loci(interacting_loci: NDArray) -> Dict[int, int]:
+def plot_interactions(model: Lasso, interactions: List[Tuple[int, int]]):
+    # protein lengths for plotting
+    a1_length = 277
+    b2_length = 278
+
+    non_zero_coef = np.where(model.coef_ != 0)[0]
+    lasso_coefs = model.coef_[non_zero_coef]
+    interactions_array = np.array(interactions)
+    interacting_loci = interactions_array[non_zero_coef]
     loci = set(
         [i[0] for i in interacting_loci] + [i[1] for i in interacting_loci]
     )
-    return {i: ceil((i + 1) / 20) for i in loci}
 
+    def get_protein_from_feature_loc(i):
+        i = ceil((i + 1) / 20)
+        if i <= a1_length:
+            return 0
+        elif i > a1_length + b2_length:
+            return 2
+        else:
+            return 1
 
-def plot_interactions(model: Lasso, interactions: List[Tuple[int, int]]):
-    non_zero_coef = np.where(model.coef_ != 0)[0]
-    interactions_array = np.array(interactions)
-    interacting_loci = interactions_array[non_zero_coef]
+    loci_mapper = {i: get_protein_from_feature_loc(i) for i in loci}
 
-    return map_loci(interacting_loci)
+    interaction_counts = np.zeros((3, 3))
+    interaction_sum = np.zeros((3, 3))
+    mask = np.zeros((3, 3))
+    mask[0, 1:] = True
+    mask[1, 2] = True
+    for i, pair in enumerate(interacting_loci):
+        n = loci_mapper[pair[0]]
+        m = loci_mapper[pair[1]]
+        interaction_counts[m, n] += 1
+        interaction_sum[m, n] += abs(lasso_coefs[i])
+
+    interaction_sum = pd.DataFrame(
+        interaction_sum, columns=["a1", "b2", "x2"], index=["a1", "b2", "x2"]
+    )
+    interaction_counts = pd.DataFrame(
+        interaction_counts,
+        columns=["a1", "b2", "x2"],
+        index=["a1", "b2", "x2"],
+    )
+
+    plt.clf()
+    sns.heatmap(interaction_counts, mask=mask, cmap="crest", annot=True)
+    plt.title("#Interactions")
+    plt.ylabel("PBP type")
+    plt.xlabel("PBP type")
+    plt.tight_layout()
+    plt.savefig("interaction_counts_heatmap.png")
+
+    plt.clf()
+    sns.heatmap(interaction_sum, mask=mask, cmap="crest", annot=True, fmt=".3")
+    plt.title("Sum of interaction lasso coefficients")
+    plt.ylabel("PBP type")
+    plt.xlabel("PBP type")
+    plt.tight_layout()
+    plt.savefig("interaction_sum_heatmap.png")
 
 
 @lru_cache(maxsize=1)
