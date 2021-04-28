@@ -13,7 +13,8 @@ from scipy.sparse import csr_matrix
 from sklearn.linear_model import Lasso
 from sklearn.metrics import mean_squared_error
 
-from models import fit_model, load_data, load_model, optimise_hps
+from interrogate_rf import load_model
+from models import fit_model, load_data, optimise_hps
 from parse_random_forest import DecisionTree_, valid_feature_pair
 from utils import ResultsContainer, accuracy, mean_acc_per_bin
 
@@ -110,6 +111,24 @@ def plot_simulations(n_interactions: int, test_data_mse: int):
     plt.tight_layout()
     plt.savefig("CDF_simulated_interactions.png")
     plt.clf()
+
+
+def compare_interaction_model_with_rf(results: ResultsContainer):
+    model = load_model()
+    testing_data = load_data(interactions=None, blosum_inference=True)[1]
+    rf_predictions = model.predict(testing_data[0])
+
+    plt.clf()
+    sns.kdeplot(testing_data[1], label="Testing Data")
+    sns.kdeplot(rf_predictions, label="RF Predictions")
+    sns.kdeplot(
+        results.testing_predictions, label="Interaction Model Predictions"
+    )
+    plt.legend()
+    plt.xlabel("Log2(MIC)")
+    plt.title("RF vs Lasso Interaction Model")
+    plt.tight_layout()
+    plt.savefig("RF_vs_lasso_interaction_model_predictions.png")
 
 
 def main():
