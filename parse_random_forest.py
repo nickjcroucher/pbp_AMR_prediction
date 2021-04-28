@@ -1,3 +1,4 @@
+from itertools import compress
 from math import ceil
 from typing import Dict, List, Tuple, Union
 
@@ -137,15 +138,53 @@ def _co_occuring_feature_pairs(
 _co_occuring_feature_pairs_remote = ray.remote(_co_occuring_feature_pairs)
 
 
+JL_INITIALISED = False
+
+
+def _jl_co_occuring_feature_pairs(
+    trees: List[DecisionTree_], feature_pairs: List[Tuple[int]]
+) -> Dict[Tuple[int], List[DecisionTree_]]:
+
+    global JL_INITIALISED
+    if not JL_INITIALISED:
+        from julia.api import Julia
+
+        Julia(compiled_modules=False)
+        from julia import (  # noqa: E402 # pylint: disable=no-name-in-module
+            Main as jl_main,
+        )
+
+        jl_main.eval('include("pyjulia_test.jl")')
+        jl_main.eval("using .ParseRF")
+
+        JL_INITIALISED = True
+
+    trees_ = [
+        (i.features, i.tree, i.leaf_idx, i.internal_node_features)
+        for i in trees
+    ]
+    linked_feature_trees = jl_main.ParseRF.co_occuring_feature_pairs(
+        trees_, feature_pairs
+    )
+
+    return {
+        k: list(compress(trees, v)) for k, v in linked_feature_trees.items()
+    }
+
+
 def co_occuring_feature_pairs(
     trees: List[DecisionTree_],
     feature_pairs: List[Tuple[int]],
     parallel: bool = False,
+    use_julia: bool = False,
 ) -> Dict[Tuple[int], List[DecisionTree_]]:
     """
     Returns dictionary mapping pairs of features to trees in which they are in
     the same decision path
     """
+    if use_julia:
+        return _jl_co_occuring_feature_pairs(trees, feature_pairs)
+
     if parallel:
         n_cpus = cpu_count()
         futures = [
