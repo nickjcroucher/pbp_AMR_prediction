@@ -1,16 +1,20 @@
 import logging
 import pickle
+from functools import lru_cache
 from math import ceil
 from random import choice
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 from nptyping import NDArray
+from scipy.sparse import csr_matrix
 from sklearn.linear_model import Lasso
 from sklearn.metrics import mean_squared_error
 
-from models import fit_model, load_data, optimise_hps, save_output
-from parse_random_forest import valid_feature_pair
+from models import fit_model, load_data, load_model, optimise_hps
+from parse_random_forest import DecisionTree_, valid_feature_pair
 from utils import ResultsContainer, accuracy, mean_acc_per_bin
 
 
@@ -21,7 +25,7 @@ def map_loci(interacting_loci: NDArray) -> Dict[int, int]:
     return {i: ceil((i + 1) / 20) for i in loci}
 
 
-def check_interactions(model: Lasso, interactions: List[Tuple[int, int]]):
+def plot_interactions(model: Lasso, interactions: List[Tuple[int, int]]):
     non_zero_coef = np.where(model.coef_ != 0)[0]
     interactions_array = np.array(interactions)
     interacting_loci = interactions_array[non_zero_coef]
@@ -29,35 +33,83 @@ def check_interactions(model: Lasso, interactions: List[Tuple[int, int]]):
     return map_loci(interacting_loci)
 
 
-def simulate_random_interactions(
-    n: int, sequence_length: int
-) -> List[Tuple[int, int]]:
+@lru_cache(maxsize=1)
+def get_included_features():
+    model = load_model()
 
-    features = list(range(sequence_length))
+    # extract each decision tree from the rf
+    trees = [DecisionTree_(dt) for dt in model.estimators_]
+
+    # get all the features which were included in the model
+    included_features = np.unique(
+        np.concatenate([tree.internal_node_features for tree in trees])
+    )
+
+    return included_features
+
+
+def simulate_random_interactions(n: int) -> List[Tuple[int, int]]:
+    included_features = get_included_features()
     feature_pairs: List[Tuple[int, int]] = []
     while len(feature_pairs) < n:
-        fp = (choice(features), choice(features))
+        fp = (choice(included_features), choice(included_features))
         if valid_feature_pair(*fp):
             feature_pairs.append(fp)
 
     return feature_pairs
 
 
-def random_interaction_model_fits(
-    n: int, sequence_length: int, model_type: str = "lasso"
-) -> float:
-    interactions = simulate_random_interactions(n, sequence_length)
+def random_interaction_model_fits(n: int, model_type: str = "lasso") -> float:
+    """
+    n: number of interaction terms to simulate
+    """
+    interactions = simulate_random_interactions(n)
 
     train, test, _ = load_data(
         blosum_inference=True, interactions=tuple(interactions)
     )
 
-    model = fit_model(train, model_type)
+    # just interaction terms
+    train = (csr_matrix(train[0].todense()[:, -len(interactions) :]), train[1])
+    test = (csr_matrix(test[0].todense()[:, -len(interactions) :]), test[1])
+
+    model = fit_model(train, model_type, alpha=0.05)
     test_predictions = model.predict(test[0])
 
     MSE = mean_squared_error(test[1], test_predictions)
     print(MSE)
     return MSE
+
+
+def plot_simulations(n_interactions: int, test_data_mse: int):
+    random_interaction_MSEs = [
+        random_interaction_model_fits(n_interactions) for i in range(100)
+    ]
+
+    plt.clf()
+    sns.displot(random_interaction_MSEs)
+    plt.title("Histogram of MSE of model fitted to random interactions")
+    plt.xlabel("MSE of lasso model")
+    plt.axvline(test_data_mse, dashes=(1, 1))
+    plt.tight_layout()
+    plt.savefig("histogram_simulated_interactions.png")
+
+    plt.clf()
+    sns.displot(random_interaction_MSEs, kind="kde")
+    plt.title("Kernel Density Estimation of the PDF")
+    plt.xlabel("MSE of lasso model")
+    plt.axvline(test_data_mse, dashes=(1, 1))
+    plt.tight_layout()
+    plt.savefig("KDE_simulated_interactions.png")
+
+    plt.clf()
+    sns.displot(random_interaction_MSEs, kind="ecdf")
+    plt.title("Empirical CDF")
+    plt.xlabel("MSE of lasso model")
+    plt.axvline(test_data_mse, dashes=(1, 1))
+    plt.tight_layout()
+    plt.savefig("CDF_simulated_interactions.png")
+    plt.clf()
 
 
 def main():
@@ -112,6 +164,10 @@ def main():
         hyperparameters=optimizer.max["params"],
         model_type=model_type,
         model=model,
+    )
+
+    plot_simulations(
+        results.model.sparse_coef_.count_nonzero(), results.testing_MSE
     )
 
 
