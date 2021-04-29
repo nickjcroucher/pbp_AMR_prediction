@@ -137,12 +137,18 @@ _co_occuring_feature_pairs_remote = ray.remote(_co_occuring_feature_pairs)
 
 class jl_api:
     def __init__(self):
-        from julia.api import Julia
+        from julia.core import UnsupportedPythonError
 
-        Julia(compiled_modules=False)
-        from julia import (  # noqa: E402 # pylint: disable=no-name-in-module
-            Main,
-        )
+        try:
+            from julia.api import Julia
+            from julia import Main
+        except UnsupportedPythonError:
+            from julia.api import Julia
+
+            Julia(compiled_modules=False)
+            from julia import (  # noqa: E402, E501 # pylint: disable=no-name-in-module
+                Main,
+            )
 
         self.jl_main = Main
         self.jl_main.eval('include("co_occuring_feature_pairs.jl")')
@@ -175,16 +181,16 @@ def co_occuring_feature_pairs(
     trees: List[DecisionTree_],
     feature_pairs: List[Tuple[int]],
     *,
+    use_julia: bool = True,
     parallel: bool = False,
-    use_julia: bool = False,
 ) -> Dict[Tuple[int], List[DecisionTree_]]:
     """
     Returns dictionary mapping pairs of features to trees in which they are in
     the same decision path
     """
     if use_julia and parallel:
-        warnings.warn(  # noqa: E501
-            "use_julia and parallel are both set to True, use_julia will take preference"
+        warnings.warn(
+            "use_julia and parallel are both set to True, use_julia will take preference"  # noqa: E501
         )
 
     if use_julia:

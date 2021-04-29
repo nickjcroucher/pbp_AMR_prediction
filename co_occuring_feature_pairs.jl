@@ -18,6 +18,7 @@ function re_index_tree(tree)
     return d
 end
 
+
 function traverse_tree(
     feature_1::Int64, 
     feature_2::Int64, 
@@ -32,7 +33,11 @@ function traverse_tree(
             return false
         end
         children = filter(x -> !tree.leaf_idx[x], children) # remove leaves
-        return any([recursive_search(child) for child in children])
+        if length(children) > 0            
+            return any([recursive_search(child) for child in children])
+        else
+            return false
+        end
     end
     
     return recursive_search(feature_1)
@@ -51,15 +56,8 @@ function linked_features(
     feature_1_id = findall(tree.features .== feature_pair[1])[1]
     feature_2_id = findall(tree.features .== feature_pair[2])[1]
 
-    try
-        # start from first node and walk down the tree
-        same_path = traverse_tree(feature_1_id, feature_2_id, tree)
-    catch ex
-        println(feature_pair)
-        println(tree)
-        throw(ex)
-    end
-
+    # start from first node and walk down the tree
+    same_path = traverse_tree(feature_1_id, feature_2_id, tree)
     if same_path
         return true
     end
