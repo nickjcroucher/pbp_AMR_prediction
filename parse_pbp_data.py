@@ -212,7 +212,6 @@ def encode_sequences(
 
         # format as array for encoder
         sequences = np.array(sequences.apply(list).to_list()).astype(np.object)
-
         enc = OneHotEncoder(
             handle_unknown="error",
             categories=[amino_acids for i in range(n_var)],
@@ -220,6 +219,7 @@ def encode_sequences(
             dtype=int,
         )
         enc.fit(sequences)
+
         encoded_sequences.append(enc.transform(sequences))
 
     data_encoded = np.concatenate(encoded_sequences, axis=1)
@@ -251,14 +251,21 @@ def build_co_occurrence_graph(
 def main():
     cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
     pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
+    maela = pd.read_csv("../data/pneumo_pbp/maela_aa_df.csv")
 
     pbp_patterns = ["a1", "b2", "x2"]
 
     cdc = parse_cdc(cdc, pbp_patterns)
     pmen = parse_pmen(pmen, cdc, pbp_patterns)
+    maela = parse_pmen(
+        maela, cdc, pbp_patterns
+    )  # same format as raw pmen data
 
     cdc_encoded_sequences = encode_sequences(cdc, pbp_patterns)  # noqa: F841
     pmen_encoded_sequences = encode_sequences(pmen, pbp_patterns)  # noqa: F841
+    maela_encoded_sequences = encode_sequences(  # noqa: F841
+        maela, pbp_patterns
+    )
 
     cdc_adj, cdc_deg = build_co_occurrence_graph(
         cdc, pbp_patterns

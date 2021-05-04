@@ -141,6 +141,7 @@ def normed_laplacian(adj: csr_matrix, deg: csr_matrix) -> csr_matrix:
 
 @lru_cache(maxsize=1)
 def load_data(
+    validation_data,
     *,
     interactions: Tuple[Tuple[int]] = None,
     blosum_inference: bool = False,
@@ -151,21 +152,26 @@ def load_data(
     Tuple[csr_matrix, pd.Series],
     Tuple[csr_matrix, pd.Series],
 ]:
+    """
+    validation_data should be either 'maela' or 'pmen'
+    """
+
     if adj_convolution is True and laplacian_convolution is True:
         raise ValueError(
             "Only one of adj_convolution or laplacian_convolution can be used"
         )
 
-    cdc = pd.read_csv("cdc_seqs_df.csv")
-    pmen = pd.read_csv("pmen_pbp_profiles_extended.csv")
-    # cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
-    # pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
+    cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
+    if validation_data == "pmen":
+        val = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
+    elif validation_data == "maela":
+        val = pd.read_csv("../data/pneumo_pbp/maela_aa_df.csv")
 
     pbp_patterns = ["a1", "b2", "x2"]
 
     cdc = parse_cdc(cdc, pbp_patterns)
     train, test = train_test_split(cdc, test_size=0.33, random_state=0)
-    pmen = parse_pmen(pmen, cdc, pbp_patterns)
+    val = parse_pmen(val, cdc, pbp_patterns)
 
     # filters data by pbp types which appear in training data
     def filter_data(data, train_types, pbp_type, invert=False):
@@ -189,7 +195,7 @@ def load_data(
             pbp_seq = f"{pbp}_seq"
             missing_types_and_sequences = pd.concat(
                 [
-                    filter_data(pmen, train_types, pbp_type, invert=True),
+                    filter_data(val, train_types, pbp_type, invert=True),
                     filter_data(test, train_types, pbp_type, invert=True),
                 ]
             )[[pbp_type, pbp_seq]].drop_duplicates()
@@ -222,17 +228,17 @@ def load_data(
                 )
                 return df[train.columns]
 
-            pmen = add_inferred_pbps(pmen)
+            val = add_inferred_pbps(val)
             test = add_inferred_pbps(test)
 
         # filter out everything which isnt in the training data
         else:
-            pmen = filter_data(pmen, train_types, pbp_type)
+            val = filter_data(val, train_types, pbp_type)
             test = filter_data(test, train_types, pbp_type)
 
     if blosum_inference:
-        pmen["isolates"] = (
-            pmen["a1_type"] + "-" + pmen["b2_type"] + "-" + pmen["x2_type"]
+        val["isolates"] = (
+            val["a1_type"] + "-" + val["b2_type"] + "-" + val["x2_type"]
         )
         test["isolates"] = (
             test["a1_type"] + "-" + test["b2_type"] + "-" + test["x2_type"]
@@ -240,26 +246,26 @@ def load_data(
 
     train_encoded_sequences = encode_sequences(train, pbp_patterns)
     test_encoded_sequences = encode_sequences(test, pbp_patterns)
-    pmen_encoded_sequences = encode_sequences(pmen, pbp_patterns)
+    val_encoded_sequences = encode_sequences(val, pbp_patterns)
 
     if adj_convolution:
         logging.info("Applying graph convolution")
         train_adj = build_co_occurrence_graph(train, pbp_patterns)[0]
         test_adj = build_co_occurrence_graph(test, pbp_patterns)[0]
-        pmen_adj = build_co_occurrence_graph(pmen, pbp_patterns)[0]
+        val_adj = build_co_occurrence_graph(val, pbp_patterns)[0]
 
         train_convolved_sequences = train_adj * train_encoded_sequences
         test_convolved_sequences = test_adj * test_encoded_sequences
-        pmen_convolved_sequences = pmen_adj * pmen_encoded_sequences
+        pmen_convolved_sequences = pmen_adj * val_encoded_sequences
 
         X_train, y_train = train_convolved_sequences, train.log2_mic
         X_test, y_test = test_convolved_sequences, test.log2_mic
-        X_validate, y_validate = pmen_convolved_sequences, pmen.log2_mic
+        X_validate, y_validate = pmen_convolved_sequences, val.log2_mic
     elif laplacian_convolution:
         logging.info("Applying graph convolution")
         train_adj, train_deg = build_co_occurrence_graph(train, pbp_patterns)
         test_adj, test_deg = build_co_occurrence_graph(test, pbp_patterns)
-        pmen_adj, pmen_deg = build_co_occurrence_graph(pmen, pbp_patterns)
+        pmen_adj, pmen_deg = build_co_occurrence_graph(val, pbp_patterns)
 
         train_laplacian = normed_laplacian(train_adj, train_deg)
         test_laplacian = normed_laplacian(test_adj, test_deg)
@@ -267,15 +273,15 @@ def load_data(
 
         train_convolved_sequences = train_laplacian * train_encoded_sequences
         test_convolved_sequences = test_laplacian * test_encoded_sequences
-        pmen_convolved_sequences = pmen_laplacian * pmen_encoded_sequences
+        pmen_convolved_sequences = pmen_laplacian * val_encoded_sequences
 
         X_train, y_train = train_convolved_sequences, train.log2_mic
         X_test, y_test = test_convolved_sequences, test.log2_mic
-        X_validate, y_validate = pmen_convolved_sequences, pmen.log2_mic
+        X_validate, y_validate = pmen_convolved_sequences, val.log2_mic
     else:
         X_train, y_train = train_encoded_sequences, train.log2_mic
         X_test, y_test = test_encoded_sequences, test.log2_mic
-        X_validate, y_validate = pmen_encoded_sequences, pmen.log2_mic
+        X_validate, y_validate = val_encoded_sequences, val.log2_mic
 
     def interact(data, interacting_features):
         interacting_features = np.concatenate(
@@ -300,10 +306,14 @@ def save_output(results: ResultsContainer, filename: str, outdir: str):
         pickle.dump(results, a)
 
 
-def main(model_type="elastic_net", blosum_inference=True):
+def main(
+    model_type="elastic_net", blosum_inference=True, validation_data="pmen"
+):
 
     logging.info("Loading data")
-    train, test, validate = load_data(blosum_inference=blosum_inference)
+    train, test, validate = load_data(
+        validation_data, blosum_inference=blosum_inference
+    )
 
     logging.info("Optimising the model for the test data accuracy")
     if model_type == "elastic_net":
@@ -358,9 +368,9 @@ def main(model_type="elastic_net", blosum_inference=True):
 
     outdir = f"results/{model_type}"
     if blosum_inference:
-        filename = "results_blosum_inferred_pbp_types.pkl"
+        filename = f"{validation_data}_results_blosum_inferred_pbp_types.pkl"
     else:
-        filename = "results_filtered_pbp_types.pkl"
+        filename = f"{validation_data}_results_filtered_pbp_types.pkl"
     save_output(results, filename, outdir)
 
 
