@@ -176,7 +176,7 @@ def compare_interaction_model_with_rf(results: ResultsContainer):
     plt.savefig("RF_vs_lasso_interaction_model_predictions.png")
 
 
-def main():
+def main(validation_data="pmen"):
 
     model_type = "lasso"
     pbounds = {"alpha": [0.05, 1.95]}
@@ -189,7 +189,9 @@ def main():
     interactions = [i[0] for i in paired_sf_p_values if i[1] == 0]
 
     train, test, validate = load_data(
-        blosum_inference=True, interactions=interactions
+        validation_data=validation_data,
+        blosum_inference=True,
+        interactions=interactions,
     )
 
     logging.info("Optimising the model for the test data accuracy")

@@ -9,7 +9,8 @@ import seaborn as sns
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import ElasticNet
 
-from models import load_data
+from models import perform_blosum_inference
+from parse_pbp_data import parse_cdc, parse_pmen
 from utils import bin_labels
 
 
@@ -42,19 +43,57 @@ def plot_binned_predictions(**kwargs):
         )
 
 
-def plot_mics_by_type(df: pd.DataFrame, figname: str):
-    df.sort_values(["mic", "isolates"], inplace=True)
+def plot_mics_by_type(
+    cdc: pd.DataFrame,
+    maela: pd.DataFrame,
+    pmen: pd.DataFrame,
+    blosum_inference: bool,
+    figname: str,
+):
+    if blosum_inference:
+        for pbp in ["a1", "b2", "x2"]:
+            pbp_type = f"{pbp}_type"
+            train_types = set(cdc[pbp_type])
+
+            pmen = perform_blosum_inference(
+                pbp_type, pbp, train_types, cdc, pmen
+            )
+            maela = perform_blosum_inference(
+                pbp_type, pbp, train_types, cdc, maela
+            )
+        pmen["isolates"] = (
+            pmen["a1_type"] + "-" + pmen["b2_type"] + "-" + pmen["x2_type"]
+        )
+        maela["isolates"] = (
+            maela["a1_type"] + "-" + maela["b2_type"] + "-" + maela["x2_type"]
+        )
+
+    cdc_types = pd.DataFrame(cdc.isolates.unique())
+    pmen_types = pd.DataFrame(pmen.isolates.unique())
+    maela_types = pd.DataFrame(maela.isolates.unique())
+
+    df = cdc_types.merge(pmen_types).merge(maela_types)
+    if len(df) == 0:
+        raise ValueError("No shared pbp types between all three datasets")
+
+    pop_mic_by_type = {"PBP_type": [], "MIC": [], "Population": []}
+    for i in df[0]:
+        for population, data in {
+            "CDC": cdc,
+            "PMEN": pmen,
+            "Maela": maela,
+        }.items():
+            mics = data.loc[data.isolates == i].mic.tolist()
+            n_mics = len(mics)
+            pop_mic_by_type["PBP_type"] += [i] * n_mics
+            pop_mic_by_type["MIC"] += mics
+            pop_mic_by_type["Population"] += [population] * n_mics
+
+    pop_mic_type_df = pd.DataFrame(pop_mic_by_type)
 
     plt.clf()
-    vp = sns.violinplot(x="isolates", y="mic", data=df)
-    vp.set(xticklabels=[])  # remove tick labels
-    vp.tick_params(bottom=False)  # remove the ticks
-    vp.set(ylabel="Log2(MIC)")
-    vp.set(xlabel="PBP Profile")
-    vp.set(title="Distribution of MICs by PBP Profiles")
-    vp
-    plt.tight_layout()
-    plt.savefig(figname)
+    sns.boxplot(x="PBP_type", y="MIC", hue="Population", data=pop_mic_type_df)
+    plt.savefig("mic_range_per_population.png")
 
 
 def load_model(
@@ -93,6 +132,15 @@ def load_raw_data():
 
 def main():
     cdc_raw, pmen_raw, maela_raw = load_raw_data()
+
+    pbp_patterns = ["a1", "b2", "x2"]
+
+    cdc = parse_cdc(cdc_raw, pbp_patterns)
+    pmen = parse_pmen(pmen_raw, cdc, pbp_patterns)
+    maela = parse_pmen(
+        maela_raw, cdc, pbp_patterns
+    )  # same format as raw pmen data
+
     plot_mics_by_type(cdc_raw, "cdc_mic_by_pbp_profile.png")
     plot_mics_by_type(pmen_raw, "pmen_mic_by_pbp_profile.png")
     plot_mics_by_type(maela_raw, "maela_mic_by_pbp_profile.png")

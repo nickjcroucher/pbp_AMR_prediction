@@ -3,7 +3,7 @@ import os
 import pickle
 import warnings
 from functools import lru_cache, partial
-from typing import Dict, Tuple, Union
+from typing import Dict, Tuple, Union, Set
 
 import pandas as pd
 import numpy as np
@@ -170,6 +170,63 @@ def filter_features_by_previous_model_fit(
     return tuple(filtered_features)
 
 
+# filters data by pbp types which appear in training data
+def _filter_data(data, train_types, pbp_type, invert=False):
+    inc_types = set(data[pbp_type])
+    inc_types = filter(lambda x: x in train_types, inc_types)  # type: ignore
+    if invert:
+        return data.loc[~data[pbp_type].isin(list(inc_types))]
+    else:
+        return data.loc[data[pbp_type].isin(list(inc_types))]
+
+
+def perform_blosum_inference(
+    pbp_type: str,
+    pbp: str,
+    train_types: Set,
+    training_data: pd.DataFrame,
+    testing_data: pd.DataFrame,
+) -> pd.DataFrame:
+
+    pbp_seq = f"{pbp}_seq"
+
+    blosum_scores = parse_blosum_matrix()
+
+    missing_types_and_sequences = _filter_data(
+        testing_data, train_types, pbp_type, invert=True
+    )[[pbp_type, pbp_seq]].drop_duplicates()
+    training_types_and_sequences = training_data[
+        [pbp_type, pbp_seq]
+    ].drop_duplicates()
+
+    closest_types = missing_types_and_sequences.apply(
+        closest_blosum_sequence,
+        axis=1,
+        pbp=pbp,
+        training_types_and_sequences=training_types_and_sequences,
+        blosum_scores=blosum_scores,
+    )
+    # apply returns a series of series' which needs to be unpacked
+    closest_types = pd.concat(closest_types.values)
+
+    def add_inferred_pbps(df):
+        df = df.merge(
+            closest_types,
+            left_on=pbp_type,
+            right_on="original_type",
+            how="left",
+        )
+        df[pbp_type].mask(
+            ~df.inferred_type.isna(), df.inferred_type, inplace=True
+        )
+        df[pbp_seq].mask(
+            ~df.inferred_type.isna(), df.inferred_seq, inplace=True
+        )
+        return df[training_data.columns]
+
+    return add_inferred_pbps(testing_data)
+
+
 @lru_cache(maxsize=2)
 def load_data(
     validation_data,
@@ -204,68 +261,23 @@ def load_data(
     train, test = train_test_split(cdc, test_size=0.33, random_state=0)
     val = parse_pmen(val, cdc, pbp_patterns)
 
-    # filters data by pbp types which appear in training data
-    def filter_data(data, train_types, pbp_type, invert=False):
-        inc_types = set(data[pbp_type])
-        inc_types = filter(  # type: ignore
-            lambda x: x in train_types, inc_types
-        )
-        if invert:
-            return data.loc[~data[pbp_type].isin(list(inc_types))]
-        else:
-            return data.loc[data[pbp_type].isin(list(inc_types))]
-
     for pbp in pbp_patterns:
         pbp_type = f"{pbp}_type"
         train_types = set(train[pbp_type])
 
         # get closest type to all missing in the training data
         if blosum_inference:
-            blosum_scores = parse_blosum_matrix()
-
-            pbp_seq = f"{pbp}_seq"
-            missing_types_and_sequences = pd.concat(
-                [
-                    filter_data(val, train_types, pbp_type, invert=True),
-                    filter_data(test, train_types, pbp_type, invert=True),
-                ]
-            )[[pbp_type, pbp_seq]].drop_duplicates()
-            training_types_and_sequences = train[
-                [pbp_type, pbp_seq]
-            ].drop_duplicates()
-
-            closest_types = missing_types_and_sequences.apply(
-                closest_blosum_sequence,
-                axis=1,
-                pbp=pbp,
-                training_types_and_sequences=training_types_and_sequences,
-                blosum_scores=blosum_scores,
+            test = perform_blosum_inference(
+                pbp_type, pbp, train_types, train, test
             )
-            # apply returns a series of series' which needs to be unpacked
-            closest_types = pd.concat(closest_types.values)
-
-            def add_inferred_pbps(df):
-                df = df.merge(
-                    closest_types,
-                    left_on=pbp_type,
-                    right_on="original_type",
-                    how="left",
-                )
-                df[pbp_type].mask(
-                    ~df.inferred_type.isna(), df.inferred_type, inplace=True
-                )
-                df[pbp_seq].mask(
-                    ~df.inferred_type.isna(), df.inferred_seq, inplace=True
-                )
-                return df[train.columns]
-
-            val = add_inferred_pbps(val)
-            test = add_inferred_pbps(test)
+            val = perform_blosum_inference(
+                pbp_type, pbp, train_types, train, val
+            )
 
         # filter out everything which isnt in the training data
         else:
-            val = filter_data(val, train_types, pbp_type)
-            test = filter_data(test, train_types, pbp_type)
+            val = _filter_data(val, train_types, pbp_type)
+            test = _filter_data(test, train_types, pbp_type)
 
     if blosum_inference:
         val["isolates"] = (
