@@ -13,6 +13,8 @@ end
 function re_index_tree(tree)
     d = Dict()
     for (key, value) in tree
+        key = convert(Int64, key) # converts from pyobject to Int64
+        value = convert.(Int64, value)
         d[key + 1] = value .+ 1
     end
     return d
@@ -94,7 +96,7 @@ function co_occuring_feature_pairs(
     # tuples to vectors. Also sort at the same time
     feature_pairs = [sort([i for i in j]) for j in feature_pairs]
     reverse_feature_pairs = [reverse(j) for j in feature_pairs]
-    
+
     # group as a julia decision_tree struct
     trees = [
         decision_tree(tree[1], re_index_tree(tree[2]), tree[3], tree[4]) 

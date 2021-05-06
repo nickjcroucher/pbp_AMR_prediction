@@ -135,7 +135,7 @@ def _co_occuring_feature_pairs(
 _co_occuring_feature_pairs_remote = ray.remote(_co_occuring_feature_pairs)
 
 
-class jl_api:
+class JlApi:
     def __init__(self):
         from julia.core import UnsupportedPythonError
 
@@ -164,15 +164,14 @@ def _jl_co_occuring_feature_pairs(
 
     global JL_API
     if JL_API is None:
-        JL_API = jl_api()  # initialise pyjulia interface
+        JL_API = JlApi()  # initialise pyjulia interface
 
+    fps = [np.array(i) for i in feature_pairs]
     trees_ = [
         (i.features, i.tree, i.leaf_idx, i.internal_node_features)
         for i in trees
     ]
-    linked_fps = JL_API.jl_main.ParseRF.co_occuring_feature_pairs(
-        trees_, feature_pairs
-    )
+    linked_fps = JL_API.jl_main.ParseRF.co_occuring_feature_pairs(trees_, fps)
     linked_fps = {k: list(compress(trees, v)) for k, v in linked_fps.items()}
     return {k: v for k, v in linked_fps.items() if v}
 

@@ -104,7 +104,7 @@ def paired_selection_frequency(
 
         N_1 = len(df.loc[df[f_1]].loc[~df[f_2]])
         N_2 = len(df.loc[~df[f_1]].loc[df[f_2]])
-        N_12 = len(df.loc[df[f_2]].loc[df[f_2]])
+        N_12 = len(df.loc[df[f_1]].loc[df[f_2]])
         N_neither = len(df.loc[~df[f_1]].loc[~df[f_2]])
 
         p_value = fisher_exact(
