@@ -20,16 +20,9 @@ def accuracy(
     return len(correct) / len(predictions) * 100
 
 
-def mean_acc_per_bin(
-    predictions: nptyping.NDArray[nptyping.Float],
+def bin_labels(
     labels: nptyping.NDArray[nptyping.Float],
-) -> float:
-    """
-    Splits labels into bins of size = bin_size, and calculates the prediction
-    accuracy in each bin.
-    Returns the mean accuracy across all bins
-    """
-    assert len(predictions) == len(labels)
+) -> nptyping.NDArray[nptyping.Float]:
 
     # apply Freedman-Diaconis rule to get optimal bin size
     # https://en.wikipedia.org/wiki/Freedman%E2%80%93Diaconis_rule
@@ -43,6 +36,24 @@ def mean_acc_per_bin(
     max_value = int(np.floor(max(labels)))
     bins = list(range(min_value, max_value + bin_size, bin_size))
     binned_labels = np.digitize(labels, bins)
+
+    median_bin_values = np.array(bins) + bin_size / 2
+
+    return binned_labels, median_bin_values
+
+
+def mean_acc_per_bin(
+    predictions: nptyping.NDArray[nptyping.Float],
+    labels: nptyping.NDArray[nptyping.Float],
+) -> float:
+    """
+    Splits labels into bins of size = bin_size, and calculates the prediction
+    accuracy in each bin.
+    Returns the mean accuracy across all bins
+    """
+    assert len(predictions) == len(labels)
+
+    binned_labels = bin_labels(labels)[0]
 
     df = pd.DataFrame(
         {

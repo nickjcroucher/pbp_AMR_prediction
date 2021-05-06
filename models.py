@@ -22,6 +22,7 @@ from parse_pbp_data import (
     parse_cdc,
     parse_pmen,
 )
+from parse_random_forest import DecisionTree_
 from utils import (
     ResultsContainer,
     accuracy,
@@ -139,7 +140,37 @@ def normed_laplacian(adj: csr_matrix, deg: csr_matrix) -> csr_matrix:
     return deg_ * adj * deg_
 
 
-@lru_cache(maxsize=1)
+def filter_features_by_previous_model_fit(
+    model_path: str,
+    training_features: csr_matrix,
+    testing_features: csr_matrix,
+    validation_features: csr_matrix,
+) -> Tuple[csr_matrix, csr_matrix, csr_matrix]:
+
+    with open(model_path, "rb") as a:
+        original_model = pickle.load(a)
+    if isinstance(original_model, ResultsContainer):
+        original_model = original_model.model
+    elif not isinstance(original_model, RandomForestRegressor):
+        raise TypeError(f"Unknown input of type {type(original_model)}")
+
+    # extract each decision tree from the rf
+    trees = [DecisionTree_(dt) for dt in original_model.estimators_]
+
+    # get all the features which were included in the model
+    included_features = np.unique(
+        np.concatenate([tree.internal_node_features for tree in trees])
+    )
+
+    filtered_features = []
+    for features in [training_features, testing_features, validation_features]:
+        features = features.todense()
+        filtered_features.append(csr_matrix(features[:, included_features]))
+
+    return tuple(filtered_features)
+
+
+@lru_cache(maxsize=2)
 def load_data(
     validation_data,
     *,
@@ -256,7 +287,7 @@ def load_data(
 
         train_convolved_sequences = train_adj * train_encoded_sequences
         test_convolved_sequences = test_adj * test_encoded_sequences
-        pmen_convolved_sequences = pmen_adj * val_encoded_sequences
+        pmen_convolved_sequences = val_adj * val_encoded_sequences
 
         X_train, y_train = train_convolved_sequences, train.log2_mic
         X_test, y_test = test_convolved_sequences, test.log2_mic
@@ -307,13 +338,25 @@ def save_output(results: ResultsContainer, filename: str, outdir: str):
 
 
 def main(
-    model_type="elastic_net", blosum_inference=True, validation_data="pmen"
+    model_type="elastic_net",
+    blosum_inference=True,
+    validation_data="pmen",
+    previous_rf_model=None,
 ):
 
     logging.info("Loading data")
     train, test, validate = load_data(
         validation_data, blosum_inference=blosum_inference
     )
+
+    # filter features by things which have been used by previously fitted model
+    if previous_rf_model is not None:
+        filtered_features = filter_features_by_previous_model_fit(
+            previous_rf_model, train[0], test[0], validate[0]
+        )
+        train = (filtered_features[0], train[1])
+        test = (filtered_features[1], test[1])
+        validate = (filtered_features[2], validate[1])
 
     logging.info("Optimising the model for the test data accuracy")
     if model_type == "elastic_net":

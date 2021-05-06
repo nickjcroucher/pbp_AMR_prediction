@@ -249,16 +249,16 @@ def build_co_occurrence_graph(
 
 
 def main():
-    cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
-    pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
-    maela = pd.read_csv("../data/pneumo_pbp/maela_aa_df.csv")
+    cdc_raw = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
+    pmen_raw = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
+    maela_raw = pd.read_csv("../data/pneumo_pbp/maela_aa_df.csv")
 
     pbp_patterns = ["a1", "b2", "x2"]
 
-    cdc = parse_cdc(cdc, pbp_patterns)
-    pmen = parse_pmen(pmen, cdc, pbp_patterns)
+    cdc = parse_cdc(cdc_raw, pbp_patterns)
+    pmen = parse_pmen(pmen_raw, cdc, pbp_patterns)
     maela = parse_pmen(
-        maela, cdc, pbp_patterns
+        maela_raw, cdc, pbp_patterns
     )  # same format as raw pmen data
 
     cdc_encoded_sequences = encode_sequences(cdc, pbp_patterns)  # noqa: F841
