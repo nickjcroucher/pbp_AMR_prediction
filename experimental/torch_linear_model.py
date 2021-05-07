@@ -10,7 +10,7 @@ import torch.optim as optim
 from torch import nn
 from bayes_opt import BayesianOptimization
 
-from linear_models import load_data
+from models import load_data
 from utils import accuracy
 from torch_model_utils import (
     DataGenerator,
@@ -155,7 +155,10 @@ def fit_model(
         logging.info("Loading data")
 
     training, testing, validation = load_data(
-        adj_convolution=False, laplacian_convolution=False, interactions=False
+        validation_data="pmen",
+        adj_convolution=False,
+        laplacian_convolution=False,
+        interactions=False,
     )
     training_data, testing_data, validation_data = format_data(
         training, testing, validation

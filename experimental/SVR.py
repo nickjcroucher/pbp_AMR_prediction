@@ -15,7 +15,7 @@ from sklearn.metrics import mean_squared_error
 from bayes_opt import BayesianOptimization
 from scipy.interpolate import interp2d
 
-from parse_pbp_data import parse_cdc, parse_pmen
+from data_preprocessing.parse_pbp_data import parse_cdc, parse_pmen
 from utils import accuracy, ResultsContainer, mean_acc_per_bin
 
 
