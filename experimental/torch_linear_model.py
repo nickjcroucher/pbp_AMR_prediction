@@ -12,7 +12,7 @@ from bayes_opt import BayesianOptimization
 
 from models import load_data
 from utils import accuracy
-from torch_model_utils import (
+from .torch_model_utils import (
     DataGenerator,
     MetricAccumulator,
     format_data,

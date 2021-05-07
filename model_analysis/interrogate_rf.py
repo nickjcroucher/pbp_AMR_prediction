@@ -14,7 +14,7 @@ from scipy.stats import fisher_exact, ttest_ind
 from sklearn.ensemble import RandomForestRegressor
 from statsmodels.stats.multitest import multipletests
 
-from parse_random_forest import (
+from .parse_random_forest import (
     DecisionTree_,
     co_occuring_feature_pairs,
     valid_feature_pair,

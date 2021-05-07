@@ -9,13 +9,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from nptyping import NDArray
 from scipy.sparse import csr_matrix
 from sklearn.linear_model import Lasso
 from sklearn.metrics import mean_squared_error
 
-from interrogate_rf import load_model
+from bayesian_interaction_model import BayesianLinearModel
 from models import fit_model, load_data, optimise_hps
-from parse_random_forest import DecisionTree_, valid_feature_pair
+from model_analysis.interrogate_rf import load_model
+from model_analysis.parse_random_forest import (
+    DecisionTree_,
+    valid_feature_pair,
+)
 from utils import ResultsContainer, accuracy, mean_acc_per_bin
 
 
@@ -177,6 +182,33 @@ def compare_interaction_model_with_rf(results: ResultsContainer):
     plt.title("RF vs Lasso Interaction Model")
     plt.tight_layout()
     plt.savefig("RF_vs_lasso_interaction_model_predictions.png")
+
+
+def filter_lasso_features(data: NDArray, model: Lasso) -> NDArray:
+    non_zero_coef = np.where(model.coef_ != 0)[0]
+    return data[:, non_zero_coef]
+
+
+def bayesian_linear_model(
+    training_features,
+    training_labels,
+    testing_features,
+    testing_labels,
+    validation_features,
+    validation_labels,
+    model,
+):
+    training_features = filter_lasso_features(
+        training_features.todense(), model
+    )
+    testing_features = filter_lasso_features(testing_features.todense(), model)
+    validation_features = filter_lasso_features(
+        validation_features.todense(), model
+    )
+
+    bayesian_lm = BayesianLinearModel(
+        training_features, training_labels.values
+    )
 
 
 def main(validation_data="pmen", blosum_inference=False, filter_unseen=False):
