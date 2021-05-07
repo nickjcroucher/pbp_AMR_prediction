@@ -227,12 +227,12 @@ def perform_blosum_inference(
     return add_inferred_pbps(testing_data)
 
 
-@lru_cache(maxsize=2)
 def load_data(
     validation_data,
     *,
     interactions: Tuple[Tuple[int]] = None,
     blosum_inference: bool = False,
+    filter_unseen: bool = True,
     adj_convolution: bool = False,
     laplacian_convolution: bool = False,
 ) -> Tuple[
@@ -244,7 +244,12 @@ def load_data(
     validation_data should be either 'maela' or 'pmen'
     """
 
-    if adj_convolution is True and laplacian_convolution is True:
+    if blosum_inference and filter_unseen:
+        raise ValueError(
+            "Blosum inference and filtering of unseen samples cannot be applied together"  # noqa: E501
+        )
+
+    if adj_convolution and laplacian_convolution:
         raise ValueError(
             "Only one of adj_convolution or laplacian_convolution can be used"
         )
@@ -275,7 +280,7 @@ def load_data(
             )
 
         # filter out everything which isnt in the training data
-        else:
+        elif filter_unseen:
             val = _filter_data(val, train_types, pbp_type)
             test = _filter_data(test, train_types, pbp_type)
 
@@ -331,7 +336,7 @@ def load_data(
             [np.multiply(data[:, i[0]], data[:, i[1]]) for i in interactions],
             axis=1,
         )
-        return csr_matrix(np.concatenate([data, interacting_features], axis=1))
+        return csr_matrix(interacting_features)
 
     if interactions is not None:
         X_train = interact(X_train.todense(), interactions)

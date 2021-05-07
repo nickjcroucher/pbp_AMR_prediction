@@ -28,6 +28,7 @@ def plot_interactions(model: Lasso, interactions: List[Tuple[int, int]]):
     lasso_coefs = model.coef_[non_zero_coef]
     interactions_array = np.array(interactions)
     interacting_loci = interactions_array[non_zero_coef]
+    interacting_loci = [sorted(i) for i in interacting_loci]
     loci = set(
         [i[0] for i in interacting_loci] + [i[1] for i in interacting_loci]
     )
@@ -113,7 +114,7 @@ def random_interaction_model_fits(n: int, model_type: str = "lasso") -> float:
     interactions = simulate_random_interactions(n)
 
     train, test, _ = load_data(
-        blosum_inference=True, interactions=tuple(interactions)
+        "pmen", blosum_inference=True, interactions=tuple(interactions)
     )
 
     # just interaction terms
@@ -160,7 +161,9 @@ def plot_simulations(n_interactions: int, test_data_mse: int):
 
 def compare_interaction_model_with_rf(results: ResultsContainer):
     model = load_model()
-    testing_data = load_data(interactions=None, blosum_inference=True)[1]
+    testing_data = load_data("pmen", interactions=None, blosum_inference=True)[
+        1
+    ]
     rf_predictions = model.predict(testing_data[0])
 
     plt.clf()
@@ -176,21 +179,22 @@ def compare_interaction_model_with_rf(results: ResultsContainer):
     plt.savefig("RF_vs_lasso_interaction_model_predictions.png")
 
 
-def main(validation_data="pmen"):
+def main(validation_data="pmen", blosum_inference=False, filter_unseen=False):
 
     model_type = "lasso"
     pbounds = {"alpha": [0.05, 1.95]}
 
     logging.info("Loading inferred interaction data")
-    with open("paired_sf_p_values.pkl", "rb") as a:
+    with open("results/intermediates/paired_sf_p_values.pkl", "rb") as a:
         paired_sf_p_values = pickle.load(a)
 
     # lowest p values are smaller than smallest 64 bit floating point number
-    interactions = [i[0] for i in paired_sf_p_values if i[1] == 0]
+    interactions = [i[0] for i in paired_sf_p_values if i[1] < 0.05]
 
     train, test, validate = load_data(
         validation_data=validation_data,
-        blosum_inference=True,
+        blosum_inference=blosum_inference,
+        filter_unseen=filter_unseen,
         interactions=interactions,
     )
 

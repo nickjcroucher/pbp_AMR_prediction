@@ -93,7 +93,7 @@ def plot_mics_by_type(
 
     plt.clf()
     sns.boxplot(x="PBP_type", y="MIC", hue="Population", data=pop_mic_type_df)
-    plt.savefig("mic_range_per_population.png")
+    plt.savefig(figname)
 
 
 def load_model(
@@ -141,9 +141,7 @@ def main():
         maela_raw, cdc, pbp_patterns
     )  # same format as raw pmen data
 
-    plot_mics_by_type(cdc_raw, "cdc_mic_by_pbp_profile.png")
-    plot_mics_by_type(pmen_raw, "pmen_mic_by_pbp_profile.png")
-    plot_mics_by_type(maela_raw, "maela_mic_by_pbp_profile.png")
+    plot_mics_by_type(cdc, maela, pmen, True, "mic_range_per_population.png")
 
 
 if __name__ == "__main__":
