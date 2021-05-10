@@ -4,53 +4,56 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-import stan
+from cmdstanpy import CmdStanModel
+from nptyping import NDArray
+from pandas import DataFrame
 from tqdm import tqdm
 
 
 class BayesianLinearModel:
-    def __init__(self, training_X, training_y, priors=None):
-        self.model_code = """
-            data {
-            int<lower=0> N;   // number of data items
-            int<lower=0> K;   // number of predictors
-            matrix[N, K] x;   // predictor matrix
-            vector[N] y;      // outcome vector
-            }
-
-            parameters {
-            real alpha;           // intercept
-            vector[K] beta;       // coefficients for predictors
-            real<lower=0> sigma;  // error scale
-            }
-
-            model {
-            y ~ normal(x * beta + alpha, sigma);  // likelihood
-            }
-        """
+    def __init__(self, training_X: NDArray, training_y: NDArray):
+        self.model = CmdStanModel(stan_file="stan/linear_model.stan")
+        self.model_ppc = CmdStanModel(stan_file="stan/linear_model_ppc.stan")
         self.features = training_X
         self.labels = training_y
-        self.model_posterior = None
         self.model_fit = None
-        self.fit_data = None
 
-    def fit(self, num_chains=6, num_samples=10000):
+    def fit(self, num_chains: int = 4, num_samples: int = 10000):
         data = {
             "N": self.features.shape[0],
             "K": self.features.shape[1],
             "x": self.features,
             "y": self.labels,
         }
-        self.model_posterior = stan.build(
-            self.model_code, data=data, random_seed=1
-        )
-        self.model_fit = self.model_posterior.sample(
-            num_chains=num_chains, num_samples=num_samples
-        )
-        self.fit_data = self.model_fit.to_frame()
 
-    def predict(self):
-        ...
+        self.model_fit = self.model.sample(
+            data=data,
+            chains=num_chains,
+            iter_sampling=num_samples,
+            iter_warmup=int(num_samples / 5),
+            show_progress=True,
+            seed=1,
+        )
+
+    def predict(self, testing_features: NDArray) -> DataFrame:
+        assert (
+            self.model_fit is not None
+        ), "Cannot generate predictions from an unfitted model"
+
+        assert (
+            testing_features.shape[1] == self.features.shape[1]
+        ), "Number of features in the data is not equal to the number in the \
+                data the model was trained on"
+
+        data = {
+            "N_tilde": testing_features.shape[0],
+            "K_tilde": testing_features.shape[1],
+            "x_tilde": testing_features,
+        }
+        new_quantities = self.model_ppc.generate_quantities(
+            data=data, mcmc_sample=self.model_fit, seed=1
+        )
+        return new_quantities.generated_quantities_pd
 
     def plot_model_fit(self):
         # create location in which to save the summary plots
@@ -59,12 +62,13 @@ class BayesianLinearModel:
         plots_directory = f"bayes_linear_model_plots_{now_timestamp}"
         os.makedirs(plots_directory)
 
-        betas = [f"beta.{i+1}" for i in range(self.features.shape[1])]
+        betas = [f"beta[{i+1}]" for i in range(self.features.shape[1])]
         params = ["alpha", "sigma"] + betas
+        posteriors = self.model_fit.draws_pd(inc_warmup=False)[params]
         print(f"Plotting fitting statistics for {len(params)} parameters")
         for param_name in tqdm(params):
             # extract fitting statistics
-            param = self.fit_data[param_name]
+            param = posteriors[param_name]
             mean = np.mean(param)
             median = np.median(param)
             CI_lower = np.percentile(param, 2.5)
@@ -101,3 +105,4 @@ class BayesianLinearModel:
             plt.gcf().tight_layout()
             plt.legend()
             plt.savefig(os.path.join(plots_directory, f"{param_name}.png"))
+        print(f"Plots saved under {plots_directory}")

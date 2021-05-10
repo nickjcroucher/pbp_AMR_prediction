@@ -14,7 +14,6 @@ from scipy.sparse import csr_matrix
 from sklearn.linear_model import Lasso
 from sklearn.metrics import mean_squared_error
 
-from bayesian_interaction_model import BayesianLinearModel
 from models import fit_model, load_data, optimise_hps
 from model_analysis.interrogate_rf import load_model
 from model_analysis.parse_random_forest import (
@@ -190,25 +189,24 @@ def filter_lasso_features(data: NDArray, model: Lasso) -> NDArray:
 
 
 def bayesian_linear_model(
-    training_features,
-    training_labels,
-    testing_features,
-    testing_labels,
-    validation_features,
-    validation_labels,
-    model,
+    training_features: csr_matrix,
+    training_labels: pd.Series,
+    lasso_model: Lasso,
 ):
+    from bayesian_interaction_model import (
+        BayesianLinearModel,
+    )  # move to top when model spec is complete
+
     training_features = filter_lasso_features(
-        training_features.todense(), model
-    )
-    testing_features = filter_lasso_features(testing_features.todense(), model)
-    validation_features = filter_lasso_features(
-        validation_features.todense(), model
+        training_features.todense(), lasso_model
     )
 
     bayesian_lm = BayesianLinearModel(
         training_features, training_labels.values
     )
+    bayesian_lm.fit()
+    bayesian_lm.plot_model_fit()
+    return bayesian_lm
 
 
 def main(validation_data="pmen", blosum_inference=False, filter_unseen=False):
@@ -220,7 +218,6 @@ def main(validation_data="pmen", blosum_inference=False, filter_unseen=False):
     with open("results/intermediates/paired_sf_p_values.pkl", "rb") as a:
         paired_sf_p_values = pickle.load(a)
 
-    # lowest p values are smaller than smallest 64 bit floating point number
     interactions = [i[0] for i in paired_sf_p_values if i[1] < 0.05]
 
     train, test, validate = load_data(
