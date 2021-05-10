@@ -206,6 +206,24 @@ def bayesian_linear_model(
     return bayesian_lm
 
 
+def CI_accuracy(
+    predictions: NDArray, labels: NDArray, CI: List[int] = [5, 95]
+) -> List[bool]:
+    if isinstance(labels, pd.Series):
+        labels = labels.values  # will break if given numpy array
+
+    percentiles = predictions.apply(np.percentile, q=CI)
+    df = pd.DataFrame(
+        {
+            "p_lower": percentiles.iloc[0],
+            "p_upper": percentiles.iloc[1],
+            "truth": labels,
+        }
+    )
+    df["within_CI"] = (df.truth >= df.p_lower) & (df.truth <= df.p_upper)
+    return df
+
+
 def main(validation_data="pmen", blosum_inference=False, filter_unseen=False):
 
     model_type = "lasso"
