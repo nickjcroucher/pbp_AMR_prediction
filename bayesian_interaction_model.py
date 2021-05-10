@@ -18,12 +18,24 @@ class BayesianLinearModel:
         self.labels = training_y
         self.model_fit = None
 
-    def fit(self, num_chains: int = 4, num_samples: int = 10000):
+    def fit(
+        self,
+        num_chains: int = 4,
+        num_samples: int = 10000,
+        alpha_mean: int = 0,
+        alpha_sd: int = 1,
+        beta_mean: int = 0,
+        beta_sd: int = 1,
+    ):
         data = {
             "N": self.features.shape[0],
             "K": self.features.shape[1],
             "x": self.features,
             "y": self.labels,
+            "alpha_mean": alpha_mean,
+            "alpha_sd": alpha_sd,
+            "beta_mean": beta_mean,
+            "beta_sd": beta_sd,
         }
 
         self.model_fit = self.model.sample(

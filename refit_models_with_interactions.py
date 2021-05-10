@@ -14,6 +14,7 @@ from scipy.sparse import csr_matrix
 from sklearn.linear_model import Lasso
 from sklearn.metrics import mean_squared_error
 
+from bayesian_interaction_model import BayesianLinearModel
 from models import fit_model, load_data, optimise_hps
 from model_analysis.interrogate_rf import load_model
 from model_analysis.parse_random_forest import (
@@ -193,10 +194,6 @@ def bayesian_linear_model(
     training_labels: pd.Series,
     lasso_model: Lasso,
 ):
-    from bayesian_interaction_model import (
-        BayesianLinearModel,
-    )  # move to top when model spec is complete
-
     training_features = filter_lasso_features(
         training_features.todense(), lasso_model
     )
@@ -270,6 +267,8 @@ def main(validation_data="pmen", blosum_inference=False, filter_unseen=False):
     )
     compare_interaction_model_with_rf(results)
     plot_interactions(results.model, interactions)
+
+    bayesian_lm = bayesian_linear_model(train[0], train[1], results.model)
 
 
 if __name__ == "__main__":
