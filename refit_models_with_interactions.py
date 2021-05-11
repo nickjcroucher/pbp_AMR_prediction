@@ -201,8 +201,10 @@ def bayesian_linear_model(
 
 
 def CI_accuracy(
-    predictions: NDArray, labels: NDArray, CI: List[int] = [5, 95]
-) -> List[bool]:
+    predictions: NDArray,
+    labels: NDArray,
+    CI: List[Union[int, float]] = [5, 95],
+) -> pd.DataFrame:
     if isinstance(labels, pd.Series):
         labels = labels.values  # will break if given numpy array
 
@@ -228,7 +230,44 @@ def plot_CI_accuracies(
     maela_bayes_predictions: pd.DataFrame,
     maela_labels: NDArray,
 ):
-    ...
+    """
+    For each population plot the percentage of predictions which are correct
+    within a range of credible intervals.
+    """
+    preds_and_labels = {
+        "train": [train_bayes_predictions, train_labels],
+        "test": [test_bayes_predictions, test_labels],
+        "pmen": [pmen_bayes_predictions, pmen_labels],
+        "maela": [maela_bayes_predictions, maela_labels],
+    }
+
+    # 95% to 5% CI
+    CIs = [[0 + (i / 10), 100 - (i / 10)] for i in list(range(25, 500, 25))]
+
+    CI_accuracies_per_pop = {}
+    for k, v in preds_and_labels.items():
+        accuracy_dfs = [CI_accuracy(*v, CI=CI) for CI in CIs]  # type: ignore
+        accuracies = [
+            len(df.loc[df["within_CI"]]) / v[1].shape[0] for df in accuracy_dfs
+        ]
+        CI_accuracies_per_pop[k] = accuracies
+
+    df = pd.DataFrame(CI_accuracies_per_pop)
+    df = pd.melt(df, value_vars=df.columns)
+    df.value = df.value * 100
+    CI_intervals = [np.diff(i)[0] for i in CIs]
+    df["CI"] = CI_intervals * 4
+
+    plt.clf()
+    sns.set_style("whitegrid")
+    sns.scatterplot(data=df, x="CI", y="value", hue="variable", legend=False)
+    sns.lineplot(data=df, x="CI", y="value", hue="variable")
+    plt.xlabel("Credible Interval")
+    plt.ylabel("Percentile of Correct Predictions")
+    plt.legend(bbox_to_anchor=(1.01, 1), borderaxespad=0)
+    plt.plot(CI_intervals, CI_intervals, "k--")
+    plt.tight_layout()
+    plt.show()
 
 
 def main(blosum_inference=False, filter_unseen=False):
@@ -316,6 +355,17 @@ def main(blosum_inference=False, filter_unseen=False):
     test_bayes_predictions = bayesian_lm.predict(testing_features)
     pmen_bayes_predictions = bayesian_lm.predict(pmen_features)
     maela_bayes_predictions = bayesian_lm.predict(maela_features)
+
+    plot_CI_accuracies(
+        train_bayes_predictions,
+        train[1].values,
+        test_bayes_predictions,
+        test[1].values,
+        pmen_bayes_predictions,
+        pmen[1].values,
+        maela_bayes_predictions,
+        maela[1].values,
+    )
 
 
 if __name__ == "__main__":

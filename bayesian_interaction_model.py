@@ -119,4 +119,7 @@ class BayesianLinearModel:
             plt.gcf().tight_layout()
             plt.legend()
             plt.savefig(os.path.join(plots_directory, f"{param_name}.png"))
+
+            plt.clf()
+
         print(f"Plots saved under {plots_directory}")
