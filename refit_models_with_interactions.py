@@ -192,17 +192,11 @@ def filter_lasso_features(data: NDArray, model: Lasso) -> NDArray:
 def bayesian_linear_model(
     training_features: csr_matrix,
     training_labels: pd.Series,
-    lasso_model: Lasso,
 ):
-    training_features = filter_lasso_features(
-        training_features.todense(), lasso_model
-    )
-
     bayesian_lm = BayesianLinearModel(
         training_features, training_labels.values
     )
     bayesian_lm.fit()
-    bayesian_lm.plot_model_fit()
     return bayesian_lm
 
 
@@ -224,7 +218,20 @@ def CI_accuracy(
     return df
 
 
-def main(validation_data="pmen", blosum_inference=False, filter_unseen=False):
+def plot_CI_accuracies(
+    train_bayes_predictions: pd.DataFrame,
+    train_labels: NDArray,
+    test_bayes_predictions: pd.DataFrame,
+    test_labels: NDArray,
+    pmen_bayes_predictions: pd.DataFrame,
+    pmen_labels: NDArray,
+    maela_bayes_predictions: pd.DataFrame,
+    maela_labels: NDArray,
+):
+    ...
+
+
+def main(blosum_inference=False, filter_unseen=False):
 
     model_type = "lasso"
     pbounds = {"alpha": [0.05, 1.95]}
@@ -235,12 +242,18 @@ def main(validation_data="pmen", blosum_inference=False, filter_unseen=False):
 
     interactions = [i[0] for i in paired_sf_p_values if i[1] < 0.05]
 
-    train, test, validate = load_data(
-        validation_data=validation_data,
+    train, test, pmen = load_data(
+        validation_data="pmen",
         blosum_inference=blosum_inference,
         filter_unseen=filter_unseen,
         interactions=interactions,
     )
+    maela = load_data(
+        validation_data="maela",
+        blosum_inference=blosum_inference,
+        filter_unseen=filter_unseen,
+        interactions=interactions,
+    )[-1]
 
     logging.info("Optimising the model for the test data accuracy")
     optimizer = optimise_hps(
@@ -256,7 +269,7 @@ def main(validation_data="pmen", blosum_inference=False, filter_unseen=False):
 
     train_predictions = model.predict(train[0])
     test_predictions = model.predict(test[0])
-    validate_predictions = model.predict(validate[0])
+    validate_predictions = model.predict(pmen[0])
 
     results = ResultsContainer(  # noqa: F841
         training_predictions=train_predictions,
@@ -264,16 +277,16 @@ def main(validation_data="pmen", blosum_inference=False, filter_unseen=False):
         validation_predictions=validate_predictions,
         training_MSE=mean_squared_error(train[1], train_predictions),
         testing_MSE=mean_squared_error(test[1], test_predictions),
-        validation_MSE=mean_squared_error(validate[1], validate_predictions),
+        validation_MSE=mean_squared_error(pmen[1], validate_predictions),
         training_accuracy=accuracy(train_predictions, train[1]),
         testing_accuracy=accuracy(test_predictions, test[1]),
-        validation_accuracy=accuracy(validate_predictions, validate[1]),
+        validation_accuracy=accuracy(validate_predictions, pmen[1]),
         training_mean_acc_per_bin=mean_acc_per_bin(
             train_predictions, train[1]
         ),
         testing_mean_acc_per_bin=mean_acc_per_bin(test_predictions, test[1]),
         validation_mean_acc_per_bin=mean_acc_per_bin(
-            validate_predictions, validate[1]
+            validate_predictions, pmen[1]
         ),
         hyperparameters=optimizer.max["params"],
         model_type=model_type,
@@ -286,7 +299,23 @@ def main(validation_data="pmen", blosum_inference=False, filter_unseen=False):
     compare_interaction_model_with_rf(results)
     plot_interactions(results.model, interactions)
 
-    bayesian_lm = bayesian_linear_model(train[0], train[1], results.model)
+    # filter the features to get only those which are used in the lasso model
+    training_features = filter_lasso_features(
+        train[0].todense(), results.model
+    )
+    testing_features = filter_lasso_features(test[0].todense(), results.model)
+    pmen_features = filter_lasso_features(pmen[0].todense(), results.model)
+    maela_features = filter_lasso_features(maela[0].todense(), results.model)
+
+    # fit bayesian model
+    bayesian_lm = bayesian_linear_model(training_features, train[1])
+    bayesian_lm.plot_model_fit()
+
+    # distributional predictions for each dataset
+    train_bayes_predictions = bayesian_lm.predict(training_features)
+    test_bayes_predictions = bayesian_lm.predict(testing_features)
+    pmen_bayes_predictions = bayesian_lm.predict(pmen_features)
+    maela_bayes_predictions = bayesian_lm.predict(maela_features)
 
 
 if __name__ == "__main__":

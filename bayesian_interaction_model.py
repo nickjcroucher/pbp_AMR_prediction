@@ -1,5 +1,5 @@
-import datetime
 import os
+from uuid import uuid1
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,17 +17,19 @@ class BayesianLinearModel:
         self.features = training_X
         self.labels = training_y
         self.model_fit = None
+        self.data = None
+        self.output_dir = os.path.join("bayesian_models", str(uuid1()))
 
     def fit(
         self,
         num_chains: int = 4,
-        num_samples: int = 10000,
+        num_samples: int = 5000,
         alpha_mean: int = 0,
         alpha_sd: int = 1,
         beta_mean: int = 0,
         beta_sd: int = 1,
     ):
-        data = {
+        self.data = {
             "N": self.features.shape[0],
             "K": self.features.shape[1],
             "x": self.features,
@@ -39,12 +41,13 @@ class BayesianLinearModel:
         }
 
         self.model_fit = self.model.sample(
-            data=data,
+            data=self.data,
             chains=num_chains,
             iter_sampling=num_samples,
             iter_warmup=int(num_samples / 5),
             show_progress=True,
             seed=1,
+            output_dir=self.output_dir,
         )
 
     def predict(self, testing_features: NDArray) -> DataFrame:
@@ -69,10 +72,9 @@ class BayesianLinearModel:
 
     def plot_model_fit(self):
         # create location in which to save the summary plots
-        now = datetime.datetime.today()
-        now_timestamp = now.strftime("%b-%d-%Y-%H-%M-%S")
-        plots_directory = f"bayes_linear_model_plots_{now_timestamp}"
-        os.makedirs(plots_directory)
+        plots_directory = os.path.join(self.output_dir, "plots")
+        if not os.path.isdir(plots_directory):
+            os.makedirs(plots_directory)
 
         betas = [f"beta[{i+1}]" for i in range(self.features.shape[1])]
         params = ["alpha", "sigma"] + betas
