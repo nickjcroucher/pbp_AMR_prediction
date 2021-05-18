@@ -1,9 +1,10 @@
 import logging
+import os
 import pickle
 from functools import lru_cache
 from math import ceil
 from random import choice
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -190,13 +191,15 @@ def filter_lasso_features(data: NDArray, model: Lasso) -> NDArray:
 
 
 def bayesian_linear_model(
-    training_features: csr_matrix,
-    training_labels: pd.Series,
+    training_features: csr_matrix, training_labels: pd.Series, **kwargs
 ):
+    """
+    **kwargs are passed to the fitting method of BayesianLinearModel
+    """
     bayesian_lm = BayesianLinearModel(
         training_features, training_labels.values
     )
-    bayesian_lm.fit()
+    bayesian_lm.fit(**kwargs)
     return bayesian_lm
 
 
@@ -229,6 +232,7 @@ def plot_CI_accuracies(
     pmen_labels: NDArray,
     maela_bayes_predictions: pd.DataFrame,
     maela_labels: NDArray,
+    outdir: str,
 ):
     """
     For each population plot the percentage of predictions which are correct
@@ -267,7 +271,7 @@ def plot_CI_accuracies(
     plt.legend(bbox_to_anchor=(1.01, 1), borderaxespad=0)
     plt.plot(CI_intervals, CI_intervals, "k--")
     plt.tight_layout()
-    plt.show()
+    plt.savefig(os.path.join(outdir, "model_prediction_accuracies.png"))
 
 
 def main(blosum_inference=False, filter_unseen=False):
@@ -365,6 +369,7 @@ def main(blosum_inference=False, filter_unseen=False):
         pmen[1].values,
         maela_bayes_predictions,
         maela[1].values,
+        bayesian_lm.output_dir,
     )
 
 
