@@ -17,7 +17,6 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 
 from data_preprocessing.parse_pbp_data import (
-    build_co_occurrence_graph,
     encode_sequences,
     parse_cdc,
     parse_pmen,
