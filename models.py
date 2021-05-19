@@ -195,36 +195,52 @@ def perform_blosum_inference(
     missing_types_and_sequences = _filter_data(
         testing_data, train_types, pbp_type, invert=True
     )[[pbp_type, pbp_seq]].drop_duplicates()
+
     training_types_and_sequences = training_data[
         [pbp_type, pbp_seq]
     ].drop_duplicates()
 
-    closest_types = missing_types_and_sequences.apply(
+    training_sequence_array = np.vstack(
+        training_types_and_sequences[pbp_seq].apply(
+            lambda x: np.array(list(x))
+        )
+    )  # stack sequences in the training data as array of characters
+
+    inferred_sequences = missing_types_and_sequences.apply(
         closest_blosum_sequence,
         axis=1,
         pbp=pbp,
-        training_types_and_sequences=training_types_and_sequences,
+        training_sequence_array=training_sequence_array,
         blosum_scores=blosum_scores,
     )
-    # apply returns a series of series' which needs to be unpacked
-    closest_types = pd.concat(closest_types.values)
+    inferred_sequences = inferred_sequences.apply(pd.Series)
+    inferred_sequences.rename(
+        columns={
+            0: "original_type",
+            1: "inferred_seq",
+            2: "inferred_type",
+        },
+        inplace=True,
+    )
 
-    def add_inferred_pbps(df):
-        df = df.merge(
-            closest_types,
-            left_on=pbp_type,
-            right_on="original_type",
-            how="left",
-        )
-        df[pbp_type].mask(
-            ~df.inferred_type.isna(), df.inferred_type, inplace=True
-        )
-        df[pbp_seq].mask(
-            ~df.inferred_type.isna(), df.inferred_seq, inplace=True
-        )
-        return df[training_data.columns]
+    testing_data = testing_data.merge(
+        inferred_sequences,
+        left_on=pbp_type,
+        right_on="original_type",
+        how="left",
+    )
+    testing_data[pbp_type].mask(
+        ~testing_data.inferred_type.isna(),
+        testing_data.inferred_type,
+        inplace=True,
+    )
+    testing_data[pbp_seq].mask(
+        ~testing_data.inferred_seq.isna(),
+        testing_data.inferred_seq,
+        inplace=True,
+    )
 
-    return add_inferred_pbps(testing_data)
+    return testing_data[training_data.columns]
 
 
 def load_data(
@@ -233,8 +249,6 @@ def load_data(
     interactions: Tuple[Tuple[int]] = None,
     blosum_inference: bool = False,
     filter_unseen: bool = True,
-    adj_convolution: bool = False,
-    laplacian_convolution: bool = False,
 ) -> Tuple[
     Tuple[csr_matrix, pd.Series],
     Tuple[csr_matrix, pd.Series],
@@ -247,11 +261,6 @@ def load_data(
     if blosum_inference and filter_unseen:
         raise ValueError(
             "Blosum inference and filtering of unseen samples cannot be applied together"  # noqa: E501
-        )
-
-    if adj_convolution and laplacian_convolution:
-        raise ValueError(
-            "Only one of adj_convolution or laplacian_convolution can be used"
         )
 
     cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
@@ -284,52 +293,13 @@ def load_data(
             val = _filter_data(val, train_types, pbp_type)
             test = _filter_data(test, train_types, pbp_type)
 
-    if blosum_inference:
-        val["isolates"] = (
-            val["a1_type"] + "-" + val["b2_type"] + "-" + val["x2_type"]
-        )
-        test["isolates"] = (
-            test["a1_type"] + "-" + test["b2_type"] + "-" + test["x2_type"]
-        )
-
     train_encoded_sequences = encode_sequences(train, pbp_patterns)
     test_encoded_sequences = encode_sequences(test, pbp_patterns)
     val_encoded_sequences = encode_sequences(val, pbp_patterns)
 
-    if adj_convolution:
-        logging.info("Applying graph convolution")
-        train_adj = build_co_occurrence_graph(train, pbp_patterns)[0]
-        test_adj = build_co_occurrence_graph(test, pbp_patterns)[0]
-        val_adj = build_co_occurrence_graph(val, pbp_patterns)[0]
-
-        train_convolved_sequences = train_adj * train_encoded_sequences
-        test_convolved_sequences = test_adj * test_encoded_sequences
-        pmen_convolved_sequences = val_adj * val_encoded_sequences
-
-        X_train, y_train = train_convolved_sequences, train.log2_mic
-        X_test, y_test = test_convolved_sequences, test.log2_mic
-        X_validate, y_validate = pmen_convolved_sequences, val.log2_mic
-    elif laplacian_convolution:
-        logging.info("Applying graph convolution")
-        train_adj, train_deg = build_co_occurrence_graph(train, pbp_patterns)
-        test_adj, test_deg = build_co_occurrence_graph(test, pbp_patterns)
-        pmen_adj, pmen_deg = build_co_occurrence_graph(val, pbp_patterns)
-
-        train_laplacian = normed_laplacian(train_adj, train_deg)
-        test_laplacian = normed_laplacian(test_adj, test_deg)
-        pmen_laplacian = normed_laplacian(pmen_adj, pmen_deg)
-
-        train_convolved_sequences = train_laplacian * train_encoded_sequences
-        test_convolved_sequences = test_laplacian * test_encoded_sequences
-        pmen_convolved_sequences = pmen_laplacian * val_encoded_sequences
-
-        X_train, y_train = train_convolved_sequences, train.log2_mic
-        X_test, y_test = test_convolved_sequences, test.log2_mic
-        X_validate, y_validate = pmen_convolved_sequences, val.log2_mic
-    else:
-        X_train, y_train = train_encoded_sequences, train.log2_mic
-        X_test, y_test = test_encoded_sequences, test.log2_mic
-        X_validate, y_validate = val_encoded_sequences, val.log2_mic
+    X_train, y_train = train_encoded_sequences, train.log2_mic
+    X_test, y_test = test_encoded_sequences, test.log2_mic
+    X_validate, y_validate = val_encoded_sequences, val.log2_mic
 
     def interact(data, interacting_features):
         interacting_features = np.concatenate(

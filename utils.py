@@ -86,35 +86,47 @@ def parse_blosum_matrix() -> Dict[str, Dict[str, int]]:
 def closest_blosum_sequence(
     pbp_data: pd.Series,
     pbp: str,
-    training_types_and_sequences: pd.DataFrame,
+    training_sequence_array: nptyping.NDArray,
     blosum_scores: pd.DataFrame,
 ):
     """
     pbp: the pbp to match
     pbp_data: series with type and sequence of pbp not in training_data
-    training_data: data to be used to find closest pbp based on blosum62
+    training_sequence_array: array of aligned sequences in the training data
     """
     pbp_seq = f"{pbp}_seq"
     pbp_type = f"{pbp}_type"
 
     pbp_sequence = pbp_data[pbp_seq]
 
-    def get_blosum_score(seq1, seq2=pbp_sequence):
-        return sum(blosum_scores[a][b] for a, b in zip(seq1, seq2))
+    def check_amino_acid(AA, pos):
+        """
+        If amino acid AA at is not seen at position pos in the training data
+        will return the closest which is based on the blosum matrix
+        """
+        # all amino acids at that position in the train set
+        training_AAs = training_sequence_array[:, pos]
 
-    scores = training_types_and_sequences[pbp_seq].apply(get_blosum_score)
-    closest_type = training_types_and_sequences.loc[
-        scores == scores.max()
-    ].head(
-        1
-    )  # takes first if there are multiple sequences with same distance
-    closest_type["original_type"] = pbp_data[pbp_type]
-    closest_type.rename(
-        columns={pbp_type: "inferred_type", pbp_seq: "inferred_seq"},
-        inplace=True,
-    )
+        if AA in training_AAs:
+            return AA
 
-    return closest_type
+        # if AA not seen at that position computes the blosum scores for all
+        # that were seen and returns the AA with highest
+        AA_blosum_comparisons = {}
+        for i in np.unique(training_AAs):
+            AA_blosum_comparisons[blosum_scores[AA][i]] = i
+
+        # if multiple AAs had the highest score the one which is returned first
+        # will be the one which it found last in the training set. This is
+        # effectively random.
+        return AA_blosum_comparisons[max(AA_blosum_comparisons.keys())]
+
+    new_pbp_sequence = [
+        check_amino_acid(j, i) for i, j in enumerate(pbp_sequence)
+    ]
+    new_pbp_sequence = "".join(new_pbp_sequence)  # mypy: ignore
+
+    return pbp_data[pbp_type], new_pbp_sequence, "inferred_type"
 
 
 @dataclass(unsafe_hash=True)
