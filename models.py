@@ -70,7 +70,7 @@ def fit_model(
     train: Tuple[Union[csr_matrix, NDArray], NDArray],
     model_type: str,
     **kwargs,
-) -> Union[ElasticNet, Lasso]:
+) -> Union[ElasticNet, Lasso, RandomForestRegressor]:
     if model_type == "random_forest":
         reg = _fit_rf(train, **kwargs)
         return reg
@@ -242,12 +242,27 @@ def perform_blosum_inference(
     return testing_data[training_data.columns]
 
 
+def cut_down_training_data(
+    df: pd.DataFrame, log_threshold: float, sample_fraction: float
+) -> pd.DataFrame:
+    """
+    Removes random subsample of training data within region of high MIC density
+    """
+    threshold = 2 ** log_threshold
+    above_threshold = df.loc[df.mic > threshold]
+    below_threshold_sample = df.loc[df.mic <= threshold].sample(
+        frac=sample_fraction, random_state=1
+    )
+    return pd.concat([above_threshold, below_threshold_sample])
+
+
 def load_data(
     validation_data,
     *,
     interactions: Tuple[Tuple[int]] = None,
     blosum_inference: bool = False,
     filter_unseen: bool = True,
+    reduce_training_data=False,
 ) -> Tuple[
     Tuple[csr_matrix, pd.Series],
     Tuple[csr_matrix, pd.Series],
@@ -267,6 +282,9 @@ def load_data(
         val = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
     elif validation_data == "maela":
         val = pd.read_csv("../data/pneumo_pbp/maela_aa_df.csv")
+
+    if reduce_training_data:
+        cdc = cut_down_training_data(cdc, -3.5, 0.5)
 
     pbp_patterns = ["a1", "b2", "x2"]
 
@@ -332,7 +350,9 @@ def main(
 
     logging.info("Loading data")
     train, test, validate = load_data(
-        validation_data, blosum_inference=blosum_inference
+        validation_data,
+        blosum_inference=blosum_inference,
+        filter_unseen=not blosum_inference,
     )
 
     # filter features by things which have been used by previously fitted model
