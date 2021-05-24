@@ -16,7 +16,7 @@ from sklearn.linear_model import Lasso
 from sklearn.metrics import mean_squared_error
 
 from bayesian_interaction_model import BayesianLinearModel
-from models import fit_model, load_data, optimise_hps
+from fit_models import fit_model, load_data, optimise_hps
 from model_analysis.interrogate_rf import load_model
 from model_analysis.parse_random_forest import (
     DecisionTree_,

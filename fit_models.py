@@ -20,8 +20,10 @@ from data_preprocessing.parse_pbp_data import (
     encode_sequences,
     parse_cdc,
     parse_pmen,
+    standardise_MICs,
 )
 from model_analysis.parse_random_forest import DecisionTree_
+from models.supervised_models import _fit_rf, _fit_en, _fit_lasso
 from utils import (
     ResultsContainer,
     accuracy,
@@ -29,41 +31,6 @@ from utils import (
     mean_acc_per_bin,
     parse_blosum_matrix,
 )
-
-
-def _fit_rf(
-    train: Tuple[Union[csr_matrix, NDArray], NDArray], **kwargs
-) -> RandomForestRegressor:
-    kwargs = {k: round(v) for k, v in kwargs.items()}
-    reg = RandomForestRegressor(**kwargs)
-    reg.fit(train[0], train[1])
-    return reg
-
-
-def _fit_en(
-    train: Tuple[Union[csr_matrix, NDArray], NDArray],
-    max_iter: int,
-    l1_ratio: float = 0.5,
-    alpha: float = 1.0,
-) -> ElasticNet:
-    reg = ElasticNet(
-        alpha=alpha,
-        l1_ratio=l1_ratio,
-        random_state=0,
-        max_iter=max_iter,
-    )
-    reg.fit(train[0], train[1])
-    return reg
-
-
-def _fit_lasso(
-    train: Tuple[Union[csr_matrix, NDArray], NDArray],
-    max_iter: int,
-    alpha: float = 1.0,
-) -> Lasso:
-    reg = Lasso(alpha=alpha, random_state=0, max_iter=max_iter)
-    reg.fit(train[0], train[1])
-    return reg
 
 
 def fit_model(
@@ -263,6 +230,8 @@ def load_data(
     blosum_inference: bool = False,
     filter_unseen: bool = True,
     reduce_training_data=False,
+    standardise_training_MIC=False,
+    standardise_test_and_val_MIC=False,
 ) -> Tuple[
     Tuple[csr_matrix, pd.Series],
     Tuple[csr_matrix, pd.Series],
@@ -291,6 +260,12 @@ def load_data(
     cdc = parse_cdc(cdc, pbp_patterns)
     train, test = train_test_split(cdc, test_size=0.33, random_state=0)
     val = parse_pmen(val, cdc, pbp_patterns)
+
+    if standardise_training_MIC:
+        train = standardise_MICs(train)
+    if standardise_test_and_val_MIC:
+        test = standardise_MICs(test)
+        val = standardise_MICs(val)
 
     for pbp in pbp_patterns:
         pbp_type = f"{pbp}_type"
@@ -342,9 +317,11 @@ def save_output(results: ResultsContainer, filename: str, outdir: str):
 
 
 def main(
-    model_type="elastic_net",
+    model_type="random_forest",
     blosum_inference=True,
     validation_data="pmen",
+    standardise_training_MIC=True,
+    standardise_test_and_val_MIC=False,
     previous_rf_model=None,
 ):
 
@@ -353,6 +330,8 @@ def main(
         validation_data,
         blosum_inference=blosum_inference,
         filter_unseen=not blosum_inference,
+        standardise_training_MIC=standardise_training_MIC,
+        standardise_test_and_val_MIC=standardise_test_and_val_MIC,
     )
 
     # filter features by things which have been used by previously fitted model

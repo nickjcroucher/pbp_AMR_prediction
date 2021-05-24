@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import OneHotEncoder
 from scipy import sparse
+from scipy.stats.distributions import norm
 
 
 def get_pbp_sequence(
@@ -122,6 +123,22 @@ def parse_cdc(cdc: pd.DataFrame, pbp_patterns: List[str]) -> pd.DataFrame:
     )
 
     return cdc_seqs
+
+
+def standardise_MICs(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Where there is more than one MIC per isolate, fit a normal distribution
+    and to the MIC values for each isolate and report the mean of the
+    distribution to each
+    """
+
+    def standardise_MICs_(data):
+        mean_log_mic = norm.fit(data.log2_mic, scale=1)[0]
+        data.log2_mic = [mean_log_mic] * len(data)
+        return data
+
+    df = df.groupby("isolates").apply(standardise_MICs_)
+    return df
 
 
 def pairwise_blast_comparisons(

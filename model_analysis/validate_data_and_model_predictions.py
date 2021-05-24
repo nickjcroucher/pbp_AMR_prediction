@@ -9,7 +9,7 @@ import seaborn as sns
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import ElasticNet
 
-from models import perform_blosum_inference
+from fit_models import perform_blosum_inference
 from data_preprocessing.parse_pbp_data import parse_cdc, parse_pmen
 from utils import bin_labels
 
