@@ -124,7 +124,7 @@ def closest_blosum_sequence(
     new_pbp_sequence = [
         check_amino_acid(j, i) for i, j in enumerate(pbp_sequence)
     ]
-    new_pbp_sequence = "".join(new_pbp_sequence)  # mypy: ignore
+    new_pbp_sequence = "".join(new_pbp_sequence)  # type: ignore
 
     return pbp_data[pbp_type], new_pbp_sequence, "inferred_type"
 

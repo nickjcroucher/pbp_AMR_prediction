@@ -19,6 +19,7 @@ def get_pbp_sequence(
 def parse_pmen(
     pmen: pd.DataFrame, cdc: pd.DataFrame, pbp_patterns: List[str]
 ) -> pd.DataFrame:
+
     cols = pmen.columns.to_series()
     pbp_seqs = {pbp: get_pbp_sequence(pbp, pmen, cols) for pbp in pbp_patterns}
     df = pd.DataFrame(pbp_seqs)
@@ -28,6 +29,9 @@ def parse_pmen(
     df["log2_mic"] = pmen.mic.apply(log2)
 
     df = df.loc[~pd.isna(df.mic)]  # drop samples with missing mic
+    df = df.loc[
+        (df.mic >= cdc.mic.min()) & (df.mic <= cdc.mic.max())
+    ]  # drop samples outside the range of the training data
 
     def match_pbp_types(df, pbp, cdc=cdc):
         pbp_type = f"{pbp}_type"
