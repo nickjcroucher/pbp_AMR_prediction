@@ -3,6 +3,7 @@ import os
 import pickle
 import warnings
 from functools import partial
+from math import log10
 from typing import Dict, Tuple, Union, Set
 
 import pandas as pd
@@ -24,6 +25,7 @@ from data_preprocessing.parse_pbp_data import (
 )
 from model_analysis.parse_random_forest import DecisionTree_
 from models.supervised_models import _fit_rf, _fit_en, _fit_lasso
+from models.unsupervised_models import _fit_DBSCAN, _fit_DBSCAN_with_UMAP
 from utils import (
     ResultsContainer,
     accuracy,
@@ -40,34 +42,40 @@ def fit_model(
 ) -> Union[ElasticNet, Lasso, RandomForestRegressor]:
     if model_type == "random_forest":
         reg = _fit_rf(train, **kwargs)
-        return reg
 
-    # lasso and en models require iterative fitting
-    max_iter = 100000
-    fitted = False
-    while not fitted:
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
+    elif model_type == "DBSCAN":
+        reg = _fit_DBSCAN(train, **kwargs)
 
-            if model_type == "elastic_net":
-                reg = _fit_en(train, max_iter, **kwargs)
-            elif model_type == "lasso":
-                reg = _fit_lasso(train, max_iter, **kwargs)
-            else:
-                raise NotImplementedError(model_type)
+    elif model_type == "DBSCAN_with_UMAP":
+        reg = _fit_DBSCAN_with_UMAP(train, **kwargs)
 
-            if len(w) > 1:
-                for warning in w:
-                    logging.error(warning.category)
-                raise Exception
-            elif w and issubclass(w[0].category, ConvergenceWarning):
-                logging.warning(
-                    f"Failed to converge with max_iter = {max_iter}, "
-                    + "adding 100000 more"
-                )
-                max_iter += 100000
-            else:
-                fitted = True
+    else:
+        # lasso and en models require iterative fitting
+        max_iter = 100000
+        fitted = False
+        while not fitted:
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+
+                if model_type == "elastic_net":
+                    reg = _fit_en(train, max_iter, **kwargs)
+                elif model_type == "lasso":
+                    reg = _fit_lasso(train, max_iter, **kwargs)
+                else:
+                    raise NotImplementedError(model_type)
+
+                if len(w) > 1:
+                    for warning in w:
+                        logging.error(warning.category)
+                    raise Exception
+                elif w and issubclass(w[0].category, ConvergenceWarning):
+                    logging.warning(
+                        f"Failed to converge with max_iter = {max_iter}, "
+                        + "adding 100000 more"
+                    )
+                    max_iter += 100000
+                else:
+                    fitted = True
 
     return reg
 
@@ -88,6 +96,8 @@ def optimise_hps(
     test: Tuple[Union[NDArray, csr_matrix], NDArray],
     pbounds: Dict[str, Tuple[float, float]],
     model_type: str,
+    init_points: int = 5,
+    n_iter: int = 10,
 ) -> BayesianOptimization:
     partial_fitting_function = partial(
         train_evaluate, train=train, test=test, model_type=model_type
@@ -96,14 +106,9 @@ def optimise_hps(
     optimizer = BayesianOptimization(
         f=partial_fitting_function, pbounds=pbounds, random_state=0
     )
-    optimizer.maximize(n_iter=10)
+    optimizer.maximize(init_points=init_points, n_iter=n_iter)
 
     return optimizer
-
-
-def normed_laplacian(adj: csr_matrix, deg: csr_matrix) -> csr_matrix:
-    deg_ = deg.power(-0.5)
-    return deg_ * adj * deg_
 
 
 def filter_features_by_previous_model_fit(
@@ -133,7 +138,7 @@ def filter_features_by_previous_model_fit(
         features = features.todense()
         filtered_features.append(csr_matrix(features[:, included_features]))
 
-    return tuple(filtered_features)
+    return tuple(filtered_features)  # type: ignore
 
 
 # filters data by pbp types which appear in training data
@@ -312,7 +317,15 @@ def save_output(results: ResultsContainer, filename: str, outdir: str):
     if not os.path.isdir(outdir):
         os.makedirs(outdir)
 
-    with open(os.path.join(outdir, filename), "wb") as a:
+    # dont overwrite existing results file
+    file_path = os.path.join(outdir, filename)
+    i = 1
+    while os.path.isfile(file_path):
+        split_path = file_path.split(".")
+        file_path = "".join(split_path[:-1]) + f"({i})" + split_path[-1]
+        i += 1
+
+    with open(file_path, "wb") as a:
         pickle.dump(results, a)
 
 
@@ -355,8 +368,20 @@ def main(
             "min_samples_split": [2, 10],
             "min_samples_leaf": [2, 2],
         }
+    elif model_type == "DBSCAN":
+        pbounds = {
+            "log_eps": [log10(0.0001), log10(0.1)],
+            "min_samples": [2, 20],
+        }
+    elif model_type == "DBSCAN_with_UMAP":
+        pbounds = {
+            "log_eps": [log10(0.0001), log10(1)],
+            "min_samples": [2, 20],
+            "umap_components": [2, 10],
+        }
     else:
         raise NotImplementedError(model_type)
+
     optimizer = optimise_hps(
         train, test, pbounds, model_type
     )  # select hps using GP
@@ -400,6 +425,7 @@ def main(
             "standardise_test_and_val_MIC": standardise_test_and_val_MIC,
             "previous_rf_model": previous_rf_model,
         },
+        optimizer=optimizer,
     )
 
     outdir = f"results/{model_type}"

@@ -2,6 +2,7 @@ import datetime
 from functools import lru_cache
 from typing import Dict, Any
 
+from bayes_opt import BayesianOptimization
 import pandas as pd
 import numpy as np
 import nptyping
@@ -157,6 +158,8 @@ class ResultsContainer:
     date_time = datetime.datetime.now()
 
     config: Dict
+
+    optimizer: BayesianOptimization = None
 
     def __repr__(self):
         return (
