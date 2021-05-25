@@ -1,3 +1,4 @@
+import datetime
 from functools import lru_cache
 from typing import Dict, Any
 
@@ -152,6 +153,10 @@ class ResultsContainer:
     model_type: str
 
     model: Any
+
+    date_time = datetime.datetime.now()
+
+    config: Dict
 
     def __repr__(self):
         return (

@@ -392,6 +392,14 @@ def main(
         hyperparameters=optimizer.max["params"],
         model_type=model_type,
         model=model,
+        config={
+            "blosum_inference": blosum_inference,
+            "filter_unseen": not blosum_inference,
+            "validation_data": validation_data,
+            "standardise_training_MIC": standardise_training_MIC,
+            "standardise_test_and_val_MIC": standardise_test_and_val_MIC,
+            "previous_rf_model": previous_rf_model,
+        },
     )
 
     outdir = f"results/{model_type}"
