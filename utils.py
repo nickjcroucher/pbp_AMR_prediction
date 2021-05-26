@@ -2,7 +2,6 @@ import datetime
 from functools import lru_cache
 from typing import Dict, Any
 
-from bayes_opt import BayesianOptimization
 import pandas as pd
 import numpy as np
 import nptyping
@@ -134,20 +133,24 @@ def closest_blosum_sequence(
 @dataclass(unsafe_hash=True)
 class ResultsContainer:
     training_accuracy: float
-    testing_accuracy: float
     validation_accuracy: float
+    testing_accuracy_1: float
+    testing_accuracy_2: float
 
     training_MSE: float
-    testing_MSE: float
     validation_MSE: float
+    testing_MSE_1: float
+    testing_MSE_2: float
 
     training_mean_acc_per_bin: float
-    testing_mean_acc_per_bin: float
     validation_mean_acc_per_bin: float
+    testing_mean_acc_per_bin_1: float
+    testing_mean_acc_per_bin_2: float
 
     training_predictions: nptyping.NDArray[nptyping.Float]
-    testing_predictions: nptyping.NDArray[nptyping.Float]
     validation_predictions: nptyping.NDArray[nptyping.Float]
+    testing_predictions_1: nptyping.NDArray[nptyping.Float]
+    testing_predictions_2: nptyping.NDArray[nptyping.Float]
 
     hyperparameters: Dict[str, float]
 
@@ -155,11 +158,9 @@ class ResultsContainer:
 
     model: Any
 
-    date_time = datetime.datetime.now()
-
     config: Dict
 
-    optimizer: BayesianOptimization = None
+    date_time = datetime.datetime.now()
 
     def __repr__(self):
         return (
@@ -168,16 +169,19 @@ class ResultsContainer:
             + "\n"
             + "ACCURACY\n"
             + f"Training Data Accuracy = {self.training_accuracy}\n"
-            + f"Testing Data Accuracy = {self.testing_accuracy}\n"
             + f"Validation Data Accuracy = {self.validation_accuracy}\n"
+            + f"Testing Data 1 Accuracy = {self.testing_accuracy_1}\n"
+            + f"Testing Data 2 Accuracy = {self.testing_accuracy_2}\n"
             + "\n"
             + "MEAN ACCURACY PER BIN\n"
             + f"Training Data Mean Accuracy = {self.training_mean_acc_per_bin}\n"  # noqa: E501
-            + f"Testing Data Mean Accuracy = {self.testing_mean_acc_per_bin}\n"
             + f"Validation Data Mean Accuracy = {self.validation_mean_acc_per_bin}\n"  # noqa: E501
+            + f"Testing Data 1 Mean Accuracy = {self.testing_mean_acc_per_bin_1}\n"  # noqa: E501
+            + f"Testing Data 2 Mean Accuracy = {self.testing_mean_acc_per_bin_2}\n"  # noqa: E501
             + "\n"
             + "MSE\n"
             + f"Training Data MSE = {self.training_MSE}\n"
-            + f"Testing Data MSE = {self.testing_MSE}\n"
             + f"Validation Data MSE = {self.validation_MSE}\n"
+            + f"Testing Data 1 MSE = {self.testing_MSE_1}\n"
+            + f"Testing Data 2 MSE = {self.testing_MSE_2}\n"
         )

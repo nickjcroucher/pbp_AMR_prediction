@@ -3,7 +3,6 @@ from typing import Tuple, Union
 
 import numpy as np
 import pandas as pd
-import umap
 from nptyping import NDArray
 from scipy.sparse import csr_matrix
 from scipy.spatial.distance import cdist
@@ -16,7 +15,7 @@ class ClusteringPredictor:
         clustering: DBSCAN,
         training_features: NDArray,
         training_labels: pd.Series,
-        reducer: umap.UMAP = None,
+        reducer=None,
     ):
         if reducer is not None:
             assert (
@@ -79,6 +78,10 @@ def _fit_DBSCAN_with_UMAP(
     log_eps: float,
     min_samples: int,
 ) -> ClusteringPredictor:
+
+    # v slow to import so only do it if this function is called
+    from umap import UMAP
+
     if isinstance(train[0], csr_matrix):
         features = train[0].todense()
     elif isinstance(train[0], NDArray):
@@ -91,9 +94,7 @@ def _fit_DBSCAN_with_UMAP(
     eps = 10 ** log_eps
     umap_components = round(umap_components)
 
-    reducer = umap.UMAP(
-        metric="hamming", n_components=umap_components, n_jobs=-1
-    )
+    reducer = UMAP(metric="hamming", n_components=umap_components, n_jobs=-1)
     # reducer will display warning saying cannot do the reverse transform with
     # the hamming metric
     with warnings.catch_warnings():

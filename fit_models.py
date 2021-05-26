@@ -20,7 +20,7 @@ from sklearn.model_selection import train_test_split
 from data_preprocessing.parse_pbp_data import (
     encode_sequences,
     parse_cdc,
-    parse_pmen,
+    parse_pmen_and_maela,
     standardise_MICs,
 )
 from model_analysis.parse_random_forest import DecisionTree_
@@ -114,8 +114,9 @@ def optimise_hps(
 def filter_features_by_previous_model_fit(
     model_path: str,
     training_features: csr_matrix,
-    testing_features: csr_matrix,
     validation_features: csr_matrix,
+    testing_features_1: csr_matrix,
+    testing_features_2: csr_matrix,
 ) -> Tuple[csr_matrix, csr_matrix, csr_matrix]:
 
     with open(model_path, "rb") as a:
@@ -134,7 +135,12 @@ def filter_features_by_previous_model_fit(
     )
 
     filtered_features = []
-    for features in [training_features, testing_features, validation_features]:
+    for features in [
+        training_features,
+        validation_features,
+        testing_features_1,
+        testing_features_2,
+    ]:
         features = features.todense()
         filtered_features.append(csr_matrix(features[:, included_features]))
 
@@ -214,62 +220,83 @@ def perform_blosum_inference(
     return testing_data[training_data.columns]
 
 
-def cut_down_training_data(
-    df: pd.DataFrame, log_threshold: float, sample_fraction: float
-) -> pd.DataFrame:
-    """
-    Removes random subsample of training data within region of high MIC density
-    """
-    threshold = 2 ** log_threshold
-    above_threshold = df.loc[df.mic > threshold]
-    below_threshold_sample = df.loc[df.mic <= threshold].sample(
-        frac=sample_fraction, random_state=1
-    )
-    return pd.concat([above_threshold, below_threshold_sample])
-
-
 def load_data(
-    validation_data,
+    train_data_population,
+    test_data_population_1,
+    test_data_population_2,
     *,
     interactions: Tuple[Tuple[int]] = None,
     blosum_inference: bool = False,
     filter_unseen: bool = True,
-    reduce_training_data=False,
-    standardise_training_MIC=False,
-    standardise_test_and_val_MIC=False,
-) -> Tuple[
-    Tuple[csr_matrix, pd.Series],
-    Tuple[csr_matrix, pd.Series],
-    Tuple[csr_matrix, pd.Series],
-]:
-    """
-    validation_data should be either 'maela' or 'pmen'
-    """
+    standardise_training_MIC: bool = False,
+    standardise_test_and_val_MIC: bool = False,
+) -> Dict:
+
+    if sorted(
+        [train_data_population, test_data_population_1, test_data_population_2]
+    ) != ["cdc", "maela", "pmen"]:
+        raise ValueError(
+            "train_data_population, test_data_population_1, and test_data_\
+population_2 should be unique and should be either of cdc, maela, or pmen"
+        )
 
     if blosum_inference and filter_unseen:
         raise ValueError(
             "Blosum inference and filtering of unseen samples cannot be applied together"  # noqa: E501
         )
-
-    cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
-    if validation_data == "pmen":
-        val = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
-    elif validation_data == "maela":
-        val = pd.read_csv("../data/pneumo_pbp/maela_aa_df.csv")
-
-    if reduce_training_data:
-        cdc = cut_down_training_data(cdc, -3.5, 0.5)
-
     pbp_patterns = ["a1", "b2", "x2"]
 
+    cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
+    pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
+    maela = pd.read_csv("../data/pneumo_pbp/maela_aa_df.csv")
+
     cdc = parse_cdc(cdc, pbp_patterns)
-    train, test = train_test_split(cdc, test_size=0.33, random_state=0)
-    val = parse_pmen(val, cdc, pbp_patterns)
+    pmen = parse_pmen_and_maela(pmen, cdc, pbp_patterns)
+    maela = parse_pmen_and_maela(maela, cdc, pbp_patterns)
+
+    if train_data_population == "cdc":
+        train, val = train_test_split(cdc, test_size=0.33, random_state=0)
+        if test_data_population_1 == "pmen":
+            test_1 = pmen
+            test_2 = maela
+        else:
+            test_1 = maela
+            test_2 = pmen
+    elif train_data_population == "pmen":
+        train, val = train_test_split(pmen, test_size=0.33, random_state=0)
+        if test_data_population_1 == "cdc":
+            test_1 = cdc
+            test_2 = maela
+        else:
+            test_1 = maela
+            test_2 = cdc
+    elif train_data_population == "maela":
+        train, val = train_test_split(maela, test_size=0.33, random_state=0)
+        if test_data_population_1 == "cdc":
+            test_1 = cdc
+            test_2 = pmen
+        else:
+            test_1 = pmen
+            test_2 = cdc
+    else:
+        raise ValueError(f"train_data_population = {train_data_population}")
+
+    class DataList(list):
+        def __init__(self, population: str):
+            self.population = population
+
+    data_dictionary = {
+        "train": DataList(train_data_population),
+        "val": DataList(train_data_population),
+        "test_1": DataList(test_data_population_1),
+        "test_2": DataList(test_data_population_2),
+    }
 
     if standardise_training_MIC:
         train = standardise_MICs(train)
     if standardise_test_and_val_MIC:
-        test = standardise_MICs(test)
+        test_1 = standardise_MICs(test_1)
+        test_2 = standardise_MICs(test_2)
         val = standardise_MICs(val)
 
     for pbp in pbp_patterns:
@@ -278,8 +305,11 @@ def load_data(
 
         # get closest type to all missing in the training data
         if blosum_inference:
-            test = perform_blosum_inference(
-                pbp_type, pbp, train_types, train, test
+            test_1 = perform_blosum_inference(
+                pbp_type, pbp, train_types, train, test_1
+            )
+            test_2 = perform_blosum_inference(
+                pbp_type, pbp, train_types, train, test_2
             )
             val = perform_blosum_inference(
                 pbp_type, pbp, train_types, train, val
@@ -287,15 +317,18 @@ def load_data(
 
         # filter out everything which isnt in the training data
         elif filter_unseen:
+            test_1 = _filter_data(test_1, train_types, pbp_type)
+            test_2 = _filter_data(test_2, train_types, pbp_type)
             val = _filter_data(val, train_types, pbp_type)
-            test = _filter_data(test, train_types, pbp_type)
 
     train_encoded_sequences = encode_sequences(train, pbp_patterns)
-    test_encoded_sequences = encode_sequences(test, pbp_patterns)
+    test_1_encoded_sequences = encode_sequences(test_1, pbp_patterns)
+    test_2_encoded_sequences = encode_sequences(test_2, pbp_patterns)
     val_encoded_sequences = encode_sequences(val, pbp_patterns)
 
     X_train, y_train = train_encoded_sequences, train.log2_mic
-    X_test, y_test = test_encoded_sequences, test.log2_mic
+    X_test_1, y_test_1 = test_1_encoded_sequences, test_1.log2_mic
+    X_test_2, y_test_2 = test_2_encoded_sequences, test_2.log2_mic
     X_validate, y_validate = val_encoded_sequences, val.log2_mic
 
     def interact(data, interacting_features):
@@ -307,10 +340,16 @@ def load_data(
 
     if interactions is not None:
         X_train = interact(X_train.todense(), interactions)
-        X_test = interact(X_test.todense(), interactions)
+        X_test_1 = interact(X_test_1.todense(), interactions)
+        X_test_2 = interact(X_test_2.todense(), interactions)
         X_validate = interact(X_validate.todense(), interactions)
 
-    return (X_train, y_train), (X_test, y_test), (X_validate, y_validate)
+    data_dictionary["train"].extend([X_train, y_train])
+    data_dictionary["val"].extend([X_validate, y_validate])
+    data_dictionary["test_1"].extend([X_test_1, y_test_1])
+    data_dictionary["test_2"].extend([X_test_2, y_test_2])
+
+    return data_dictionary
 
 
 def save_output(results: ResultsContainer, filename: str, outdir: str):
@@ -322,7 +361,11 @@ def save_output(results: ResultsContainer, filename: str, outdir: str):
     i = 1
     while os.path.isfile(file_path):
         split_path = file_path.split(".")
-        file_path = "".join(split_path[:-1]) + f"({i})" + split_path[-1]
+        path_minus_ext = "".join(split_path[:-1])
+        if i > 1:
+            path_minus_ext = path_minus_ext[:-3]
+        ext = split_path[-1]
+        file_path = path_minus_ext + f"({i})." + ext
         i += 1
 
     with open(file_path, "wb") as a:
@@ -330,17 +373,21 @@ def save_output(results: ResultsContainer, filename: str, outdir: str):
 
 
 def main(
+    train_data_population="cdc",
+    test_data_population_1="pmen",
+    test_data_population_2="maela",
     model_type="random_forest",
     blosum_inference=True,
-    validation_data="pmen",
     standardise_training_MIC=True,
     standardise_test_and_val_MIC=False,
     previous_rf_model=None,
 ):
 
     logging.info("Loading data")
-    train, test, validate = load_data(
-        validation_data,
+    data = load_data(
+        train_data_population,
+        test_data_population_1,
+        test_data_population_2,
         blosum_inference=blosum_inference,
         filter_unseen=not blosum_inference,
         standardise_training_MIC=standardise_training_MIC,
@@ -350,11 +397,16 @@ def main(
     # filter features by things which have been used by previously fitted model
     if previous_rf_model is not None:
         filtered_features = filter_features_by_previous_model_fit(
-            previous_rf_model, train[0], test[0], validate[0]
+            previous_rf_model,
+            data["train"][0],
+            data["val"][0],
+            data["test_1"][0],
+            data["test_2"][0],
         )
-        train = (filtered_features[0], train[1])
-        test = (filtered_features[1], test[1])
-        validate = (filtered_features[2], validate[1])
+        data["train"][0] = filtered_features[0]
+        data["val"][0] = filtered_features[1]
+        data["test_1"][0] = filtered_features[2]
+        data["test_2"][0] = filtered_features[3]
 
     logging.info("Optimising the model for the test data accuracy")
     if model_type == "elastic_net":
@@ -383,36 +435,51 @@ def main(
         raise NotImplementedError(model_type)
 
     optimizer = optimise_hps(
-        train, test, pbounds, model_type
+        data["train"], data["test_1"], pbounds, model_type
     )  # select hps using GP
 
     logging.info(
         f"Fitting model with optimal hyperparameters: {optimizer.max['params']}"  # noqa: E501
     )
     model = fit_model(
-        train, model_type=model_type, **optimizer.max["params"]
+        data["train"], model_type=model_type, **optimizer.max["params"]
     )  # get best model fit
 
-    train_predictions = model.predict(train[0])
-    test_predictions = model.predict(test[0])
-    validate_predictions = model.predict(validate[0])
+    train_predictions = model.predict(data["train"][0])
+    validate_predictions = model.predict(data["val"][0])
+    test_predictions_1 = model.predict(data["test_1"][0])
+    test_predictions_2 = model.predict(data["test_2"][0])
 
     results = ResultsContainer(  # noqa: F841
         training_predictions=train_predictions,
-        testing_predictions=test_predictions,
         validation_predictions=validate_predictions,
-        training_MSE=mean_squared_error(train[1], train_predictions),
-        testing_MSE=mean_squared_error(test[1], test_predictions),
-        validation_MSE=mean_squared_error(validate[1], validate_predictions),
-        training_accuracy=accuracy(train_predictions, train[1]),
-        testing_accuracy=accuracy(test_predictions, test[1]),
-        validation_accuracy=accuracy(validate_predictions, validate[1]),
-        training_mean_acc_per_bin=mean_acc_per_bin(
-            train_predictions, train[1]
+        testing_predictions_1=test_predictions_1,
+        testing_predictions_2=test_predictions_2,
+        training_MSE=mean_squared_error(data["train"][1], train_predictions),
+        validation_MSE=mean_squared_error(
+            data["val"][1], validate_predictions
         ),
-        testing_mean_acc_per_bin=mean_acc_per_bin(test_predictions, test[1]),
+        testing_MSE_1=mean_squared_error(
+            data["test_1"][1], test_predictions_1
+        ),
+        testing_MSE_2=mean_squared_error(
+            data["test_2"][1], test_predictions_2
+        ),
+        training_accuracy=accuracy(train_predictions, data["train"][1]),
+        validation_accuracy=accuracy(validate_predictions, data["val"][1]),
+        testing_accuracy_1=accuracy(test_predictions_1, data["test_1"][1]),
+        testing_accuracy_2=accuracy(test_predictions_2, data["test_2"][1]),
+        training_mean_acc_per_bin=mean_acc_per_bin(
+            train_predictions, data["train"][1]
+        ),
         validation_mean_acc_per_bin=mean_acc_per_bin(
-            validate_predictions, validate[1]
+            validate_predictions, data["val"][1]
+        ),
+        testing_mean_acc_per_bin_1=mean_acc_per_bin(
+            test_predictions_1, data["test_1"][1]
+        ),
+        testing_mean_acc_per_bin_2=mean_acc_per_bin(
+            test_predictions_2, data["test_2"][1]
         ),
         hyperparameters=optimizer.max["params"],
         model_type=model_type,
@@ -420,19 +487,20 @@ def main(
         config={
             "blosum_inference": blosum_inference,
             "filter_unseen": not blosum_inference,
-            "validation_data": validation_data,
             "standardise_training_MIC": standardise_training_MIC,
             "standardise_test_and_val_MIC": standardise_test_and_val_MIC,
             "previous_rf_model": previous_rf_model,
+            "train_val_population": data["train"].population,
+            "test_1_population": data["test_1"].population,
+            "test_2_population": data["test_2"].population,
         },
-        optimizer=optimizer,
     )
 
     outdir = f"results/{model_type}"
     if blosum_inference:
-        filename = f"{validation_data}_results_blosum_inferred_pbp_types.pkl"
+        filename = f"train_pop_{train_data_population}_results_blosum_inferred_pbp_types.pkl"  # noqa: E501
     else:
-        filename = f"{validation_data}_results_filtered_pbp_types.pkl"
+        filename = f"train_pop_{train_data_population}_results_filtered_pbp_types.pkl"  # noqa: E501
     save_output(results, filename, outdir)
 
 

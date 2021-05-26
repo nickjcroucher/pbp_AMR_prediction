@@ -10,7 +10,7 @@ def _fit_rf(
     train: Tuple[Union[csr_matrix, NDArray], NDArray], **kwargs
 ) -> RandomForestRegressor:
     kwargs = {k: round(v) for k, v in kwargs.items()}
-    reg = RandomForestRegressor(**kwargs)
+    reg = RandomForestRegressor(**kwargs, n_jobs=-1)
     reg.fit(train[0], train[1])
     return reg
 

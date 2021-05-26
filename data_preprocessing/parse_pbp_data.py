@@ -17,7 +17,7 @@ def get_pbp_sequence(
     return df[pbp_cols].sum(axis=1)
 
 
-def parse_pmen(
+def parse_pmen_and_maela(
     pmen: pd.DataFrame, cdc: pd.DataFrame, pbp_patterns: List[str]
 ) -> pd.DataFrame:
 
@@ -232,7 +232,7 @@ def encode_sequences(
         n_var = len(sequences.iloc[0])
 
         # format as array for encoder
-        sequences = np.array(sequences.apply(list).to_list()).astype(np.object)
+        sequences = np.array(sequences.apply(list).to_list()).astype(np.object)  # type: ignore noqa: E501
         enc = OneHotEncoder(
             handle_unknown="error",
             categories=[amino_acids for i in range(n_var)],
@@ -277,8 +277,8 @@ def main():
     pbp_patterns = ["a1", "b2", "x2"]
 
     cdc = parse_cdc(cdc_raw, pbp_patterns)
-    pmen = parse_pmen(pmen_raw, cdc, pbp_patterns)
-    maela = parse_pmen(
+    pmen = parse_pmen_and_maela(pmen_raw, cdc, pbp_patterns)
+    maela = parse_pmen_and_maela(
         maela_raw, cdc, pbp_patterns
     )  # same format as raw pmen data
 
