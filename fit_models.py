@@ -375,9 +375,9 @@ def main(
         }
     elif model_type == "DBSCAN_with_UMAP":
         pbounds = {
-            "log_eps": [log10(0.0001), log10(1)],
+            "log_eps": [log10(0.1), log10(10)],
             "min_samples": [2, 20],
-            "umap_components": [2, 10],
+            "umap_components": [2, 15],
         }
     else:
         raise NotImplementedError(model_type)

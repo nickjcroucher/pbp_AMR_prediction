@@ -24,6 +24,9 @@ class ClusteringPredictor:
             ), "If UMAP reducer is used the training features should \
 be embedded"
 
+        if len(clustering.core_sample_indices_) == 0:
+            raise ValueError("Clustering is entirely noise")
+
         self.clustering = clustering
         self.training_features = training_features
         self.training_labels = training_labels
@@ -101,6 +104,12 @@ def _fit_DBSCAN_with_UMAP(
         eps=eps, min_samples=min_samples, metric="euclidean", n_jobs=-1
     )
     clustering.fit(embedding)
+    if len(clustering.core_sample_indices_) == 0:
+        raise ValueError(
+            f"Failed to identify any clusters in the data with eps={eps}, "
+            + f"min_samples={min_samples}, "
+            + f"and umap_components = {umap_components}"
+        )
 
     reg = ClusteringPredictor(clustering, embedding, train[1], reducer)
     return reg
