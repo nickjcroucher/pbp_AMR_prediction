@@ -166,6 +166,7 @@ class ResultsContainer:
         return (
             f"model: {self.model_type}\n"
             + f"model_hyperparameters: {self.hyperparameters},\n"
+            + f"model fit config: {self.config}, \n"
             + "\n"
             + "ACCURACY\n"
             + f"Training Data Accuracy = {self.training_accuracy}\n"
