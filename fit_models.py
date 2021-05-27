@@ -1,13 +1,16 @@
+#!/usr/bin/env python3
+
+import argparse
 import logging
 import os
 import pickle
 import warnings
 from functools import partial
 from math import log10
-from typing import Dict, Tuple, Union, Set
+from typing import Dict, Set, Tuple, Union
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from bayes_opt import BayesianOptimization
 from nptyping import NDArray
 from scipy.sparse import csr_matrix
@@ -24,7 +27,7 @@ from data_preprocessing.parse_pbp_data import (
     standardise_MICs,
 )
 from model_analysis.parse_random_forest import DecisionTree_
-from models.supervised_models import _fit_rf, _fit_en, _fit_lasso
+from models.supervised_models import _fit_en, _fit_lasso, _fit_rf
 from models.unsupervised_models import _fit_DBSCAN, _fit_DBSCAN_with_UMAP
 from utils import (
     ResultsContainer,
@@ -372,6 +375,62 @@ def save_output(results: ResultsContainer, filename: str, outdir: str):
         pickle.dump(results, a)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Fit predictive model of penicilin MIC to PBP amino acid sequence"  # noqa: E501
+    )
+    parser.add_argument(
+        "--train_pop",
+        dest="train_data_population",
+        type=str,
+        help="Population which the model should be fitted to, either cdc, pmen or maela",  # noqa: E501
+    )
+    parser.add_argument(
+        "--test_pop_1",
+        dest="test_data_population_1",
+        type=str,
+        help="Either cdc, pmen, or maela",
+    )
+    parser.add_argument(
+        "--test_pop_2",
+        dest="test_data_population_2",
+        type=str,
+        help="Either cdc, pmen, or maela",
+    )
+    parser.add_argument(
+        "--model_type",
+        type=str,
+        help="random_forest, elastic_net, lasso, DBSCAN, or DBSCAN_with_UMAP",
+    )
+    parser.add_argument(
+        "--blosum_inference",
+        type=bool,
+        default=True,
+        help="If blosum inference is not conducted on then PBP types not found in the train data will be filtered from the test data",  # noqa: E501
+    )
+    parser.add_argument(
+        "--standardise_training_MIC",
+        type=bool,
+        default=True,
+        help="Where multiple MICs are reported for same PBP type, sets all to mean of fitted normal distribution",  # noqa: E501
+    )
+    parser.add_argument(
+        "--standardise_testing_MIC",
+        dest="standardise_test_and_val_MIC",
+        type=bool,
+        default=False,
+        help="Where multiple MICs are reported for same PBP type, sets all to mean of fitted normal distribution",  # noqa: E501
+    )
+    parser.add_argument(
+        "--previous_rf_model",
+        type=str,
+        default=None,
+        help="Used to filter features",
+    )
+
+    return vars(parser.parse_args())  # return as a dictionary
+
+
 def main(
     train_data_population="cdc",
     test_data_population_1="pmen",
@@ -496,6 +555,8 @@ def main(
         },
     )
 
+    print(results)
+
     outdir = f"results/{model_type}"
     if blosum_inference:
         filename = f"train_pop_{train_data_population}_results_blosum_inferred_pbp_types.pkl"  # noqa: E501
@@ -508,4 +569,4 @@ if __name__ == "__main__":
     logging.basicConfig()
     logging.root.setLevel(logging.INFO)
 
-    main()
+    main(**parse_args())
