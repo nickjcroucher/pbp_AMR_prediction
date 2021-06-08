@@ -7,10 +7,9 @@ import pickle
 import warnings
 from functools import partial
 from math import log10
-from typing import Dict, Set, Tuple, Union
+from typing import Dict, Tuple, Union
 
 import numpy as np
-import pandas as pd
 from bayes_opt import BayesianOptimization
 from nptyping import NDArray
 from scipy.sparse import csr_matrix
@@ -18,23 +17,16 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import ElasticNet, Lasso
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
 
-from data_preprocessing.parse_pbp_data import (
-    encode_sequences,
-    parse_cdc,
-    parse_pmen_and_maela,
-    standardise_MICs,
-)
+from data_preprocessing.parse_pbp_data import encode_sequences
 from model_analysis.parse_random_forest import DecisionTree_
 from models.supervised_models import _fit_en, _fit_lasso, _fit_rf
 from models.unsupervised_models import _fit_DBSCAN, _fit_DBSCAN_with_UMAP
 from utils import (
-    ResultsContainer,
     accuracy,
-    closest_blosum_sequence,
+    load_data,
     mean_acc_per_bin,
-    parse_blosum_matrix,
+    ResultsContainer,
 )
 
 
@@ -150,80 +142,7 @@ def filter_features_by_previous_model_fit(
     return tuple(filtered_features)  # type: ignore
 
 
-# filters data by pbp types which appear in training data
-def _filter_data(data, train_types, pbp_type, invert=False):
-    inc_types = set(data[pbp_type])
-    inc_types = filter(lambda x: x in train_types, inc_types)  # type: ignore
-    if invert:
-        return data.loc[~data[pbp_type].isin(list(inc_types))]
-    else:
-        return data.loc[data[pbp_type].isin(list(inc_types))]
-
-
-def perform_blosum_inference(
-    pbp_type: str,
-    pbp: str,
-    train_types: Set,
-    training_data: pd.DataFrame,
-    testing_data: pd.DataFrame,
-) -> pd.DataFrame:
-
-    pbp_seq = f"{pbp}_seq"
-
-    blosum_scores = parse_blosum_matrix()
-
-    missing_types_and_sequences = _filter_data(
-        testing_data, train_types, pbp_type, invert=True
-    )[[pbp_type, pbp_seq]].drop_duplicates()
-
-    training_types_and_sequences = training_data[
-        [pbp_type, pbp_seq]
-    ].drop_duplicates()
-
-    training_sequence_array = np.vstack(
-        training_types_and_sequences[pbp_seq].apply(
-            lambda x: np.array(list(x))
-        )
-    )  # stack sequences in the training data as array of characters
-
-    inferred_sequences = missing_types_and_sequences.apply(
-        closest_blosum_sequence,
-        axis=1,
-        pbp=pbp,
-        training_sequence_array=training_sequence_array,
-        blosum_scores=blosum_scores,
-    )
-    inferred_sequences = inferred_sequences.apply(pd.Series)
-    inferred_sequences.rename(
-        columns={
-            0: "original_type",
-            1: "inferred_seq",
-            2: "inferred_type",
-        },
-        inplace=True,
-    )
-
-    testing_data = testing_data.merge(
-        inferred_sequences,
-        left_on=pbp_type,
-        right_on="original_type",
-        how="left",
-    )
-    testing_data[pbp_type].mask(
-        ~testing_data.inferred_type.isna(),
-        testing_data.inferred_type,
-        inplace=True,
-    )
-    testing_data[pbp_seq].mask(
-        ~testing_data.inferred_seq.isna(),
-        testing_data.inferred_seq,
-        inplace=True,
-    )
-
-    return testing_data[training_data.columns]
-
-
-def load_data(
+def load_and_format_data(
     train_data_population,
     test_data_population_1,
     test_data_population_2,
@@ -235,94 +154,18 @@ def load_data(
     standardise_test_and_val_MIC: bool = False,
 ) -> Dict:
 
-    if sorted(
-        [train_data_population, test_data_population_1, test_data_population_2]
-    ) != ["cdc", "maela", "pmen"]:
-        raise ValueError(
-            "train_data_population, test_data_population_1, and test_data_\
-population_2 should be unique and should be either of cdc, maela, or pmen"
-        )
-
-    if blosum_inference and filter_unseen:
-        raise ValueError(
-            "Blosum inference and filtering of unseen samples cannot be applied together"  # noqa: E501
-        )
     pbp_patterns = ["a1", "b2", "x2"]
 
-    cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
-    pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
-    maela = pd.read_csv("../data/pneumo_pbp/maela_aa_df.csv")
-
-    cdc = parse_cdc(cdc, pbp_patterns)
-    pmen = parse_pmen_and_maela(pmen, cdc, pbp_patterns)
-    maela = parse_pmen_and_maela(maela, cdc, pbp_patterns)
-
-    if train_data_population == "cdc":
-        train, val = train_test_split(cdc, test_size=0.33, random_state=0)
-        if test_data_population_1 == "pmen":
-            test_1 = pmen
-            test_2 = maela
-        else:
-            test_1 = maela
-            test_2 = pmen
-    elif train_data_population == "pmen":
-        train, val = train_test_split(pmen, test_size=0.33, random_state=0)
-        if test_data_population_1 == "cdc":
-            test_1 = cdc
-            test_2 = maela
-        else:
-            test_1 = maela
-            test_2 = cdc
-    elif train_data_population == "maela":
-        train, val = train_test_split(maela, test_size=0.33, random_state=0)
-        if test_data_population_1 == "cdc":
-            test_1 = cdc
-            test_2 = pmen
-        else:
-            test_1 = pmen
-            test_2 = cdc
-    else:
-        raise ValueError(f"train_data_population = {train_data_population}")
-
-    class DataList(list):
-        def __init__(self, population: str):
-            self.population = population
-
-    data_dictionary = {
-        "train": DataList(train_data_population),
-        "val": DataList(train_data_population),
-        "test_1": DataList(test_data_population_1),
-        "test_2": DataList(test_data_population_2),
-    }
-
-    if standardise_training_MIC:
-        train = standardise_MICs(train)
-    if standardise_test_and_val_MIC:
-        test_1 = standardise_MICs(test_1)
-        test_2 = standardise_MICs(test_2)
-        val = standardise_MICs(val)
-
-    for pbp in pbp_patterns:
-        pbp_type = f"{pbp}_type"
-        train_types = set(train[pbp_type])
-
-        # get closest type to all missing in the training data
-        if blosum_inference:
-            test_1 = perform_blosum_inference(
-                pbp_type, pbp, train_types, train, test_1
-            )
-            test_2 = perform_blosum_inference(
-                pbp_type, pbp, train_types, train, test_2
-            )
-            val = perform_blosum_inference(
-                pbp_type, pbp, train_types, train, val
-            )
-
-        # filter out everything which isnt in the training data
-        elif filter_unseen:
-            test_1 = _filter_data(test_1, train_types, pbp_type)
-            test_2 = _filter_data(test_2, train_types, pbp_type)
-            val = _filter_data(val, train_types, pbp_type)
+    train, test_1, test_2, val = load_data(
+        train_data_population,
+        test_data_population_1,
+        test_data_population_2,
+        interactions,
+        blosum_inference,
+        filter_unseen,
+        standardise_training_MIC,
+        standardise_test_and_val_MIC,
+    )
 
     train_encoded_sequences = encode_sequences(train, pbp_patterns)
     test_1_encoded_sequences = encode_sequences(test_1, pbp_patterns)
@@ -346,6 +189,17 @@ population_2 should be unique and should be either of cdc, maela, or pmen"
         X_test_1 = interact(X_test_1.todense(), interactions)
         X_test_2 = interact(X_test_2.todense(), interactions)
         X_validate = interact(X_validate.todense(), interactions)
+
+    class DataList(list):
+        def __init__(self, population: str):
+            self.population = population
+
+    data_dictionary = {
+        "train": DataList(train_data_population),
+        "val": DataList(train_data_population),
+        "test_1": DataList(test_data_population_1),
+        "test_2": DataList(test_data_population_2),
+    }
 
     data_dictionary["train"].extend([X_train, y_train])
     data_dictionary["val"].extend([X_validate, y_validate])
@@ -443,7 +297,7 @@ def main(
 ):
 
     logging.info("Loading data")
-    data = load_data(
+    data = load_and_format_data(
         train_data_population,
         test_data_population_1,
         test_data_population_2,
