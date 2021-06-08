@@ -165,7 +165,7 @@ def split_asymmetry(
         right_fp_2_loc = []
         for fp_2 in all_fp_2:
             if tree._traverse_tree(right_child, fp_2):
-                left_fp_2_loc.append(fp_2)
+                right_fp_2_loc.append(fp_2)
         if len(right_fp_2_loc) == 0:
             return None
 
