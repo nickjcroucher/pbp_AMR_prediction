@@ -13,6 +13,7 @@ from data_preprocessing.parse_pbp_data import (
     parse_pmen_and_maela,
     standardise_MICs,
 )
+from models.HMM_model import ProfileHMMPredictor
 
 
 def _filter_data(data, train_types, pbp_type, invert=False):
@@ -90,15 +91,38 @@ def perform_blosum_inference(
     return testing_data[training_data.columns]
 
 
+def perform_HMM_inference(
+    train: pd.DataFrame,
+    test_1: pd.DataFrame,
+    test_2: pd.DataFrame,
+    val: pd.DataFrame,
+) -> Tuple:
+
+    pbp_seqs = ["a1_seq", "b2_seq", "x2_seq"]
+
+    # one model trained on each pbp type
+    hmm_predictors = {
+        pbp: ProfileHMMPredictor(train, [pbp]) for pbp in pbp_seqs
+    }
+
+    for pbp in pbp_seqs:
+        test_1[pbp] = hmm_predictors[pbp].closest_HMM_sequence(test_1[pbp])
+        test_2[pbp] = hmm_predictors[pbp].closest_HMM_sequence(test_2[pbp])
+        val[pbp] = hmm_predictors[pbp].closest_HMM_sequence(val[pbp])
+
+    return test_1, test_2, val
+
+
 def load_data(
     train_data_population,
     test_data_population_1,
     test_data_population_2,
     blosum_inference: bool = False,
+    HMM_inference: bool = False,
     filter_unseen: bool = True,
     standardise_training_MIC: bool = False,
     standardise_test_and_val_MIC: bool = False,
-) -> Tuple:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     if sorted(
         [train_data_population, test_data_population_1, test_data_population_2]
@@ -108,9 +132,12 @@ def load_data(
 population_2 should be unique and should be either of cdc, maela, or pmen"
         )
 
-    if blosum_inference and filter_unseen:
+    if (
+        len([i for i in [blosum_inference, HMM_inference, filter_unseen] if i])
+        > 1
+    ):
         raise ValueError(
-            "Blosum inference and filtering of unseen samples cannot be applied together"  # noqa: E501
+            "At most one of blosum inference, HMM_inference, or filter_unseen can be true"  # noqa: E501
         )
     pbp_patterns = ["a1", "b2", "x2"]
 
@@ -177,6 +204,11 @@ population_2 should be unique and should be either of cdc, maela, or pmen"
             test_1 = _filter_data(test_1, train_types, pbp_type)
             test_2 = _filter_data(test_2, train_types, pbp_type)
             val = _filter_data(val, train_types, pbp_type)
+
+    # replace each sequence in test sets with consensus sequence from HMM
+    # fitted to training sequences of each MIC
+    if HMM_inference:
+        test_1, test_2, val = perform_HMM_inference(train, test_1, test_2, val)
 
     return train, test_1, test_2, val
 

@@ -7,7 +7,7 @@ import pickle
 import warnings
 from functools import partial
 from math import log10
-from typing import Dict, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 from bayes_opt import BayesianOptimization
@@ -89,7 +89,7 @@ def train_evaluate(
 def optimise_hps(
     train: Tuple[Union[NDArray, csr_matrix], NDArray],
     test: Tuple[Union[NDArray, csr_matrix], NDArray],
-    pbounds: Dict[str, Tuple[float, float]],
+    pbounds: Dict[str, List[float]],
     model_type: str,
     init_points: int = 5,
     n_iter: int = 10,
@@ -112,7 +112,7 @@ def filter_features_by_previous_model_fit(
     validation_features: csr_matrix,
     testing_features_1: csr_matrix,
     testing_features_2: csr_matrix,
-) -> Tuple[csr_matrix, csr_matrix, csr_matrix]:
+) -> Tuple[csr_matrix, csr_matrix, csr_matrix, csr_matrix]:
 
     with open(model_path, "rb") as a:
         original_model = pickle.load(a)
@@ -149,6 +149,7 @@ def load_and_format_data(
     *,
     interactions: Tuple[Tuple[int]] = None,
     blosum_inference: bool = False,
+    HMM_inference: bool = False,
     filter_unseen: bool = True,
     standardise_training_MIC: bool = False,
     standardise_test_and_val_MIC: bool = False,
@@ -285,14 +286,16 @@ def parse_args():
 
 
 def main(
-    train_data_population="cdc",
-    test_data_population_1="pmen",
-    test_data_population_2="maela",
-    model_type="random_forest",
-    blosum_inference=True,
-    standardise_training_MIC=True,
-    standardise_test_and_val_MIC=False,
-    previous_rf_model=None,
+    train_data_population: str = "cdc",
+    test_data_population_1: str = "pmen",
+    test_data_population_2: str = "maela",
+    model_type: str = "random_forest",
+    blosum_inference: bool = True,
+    HMM_inference: bool = False,
+    filter_unseen: bool = False,
+    standardise_training_MIC: bool = True,
+    standardise_test_and_val_MIC: bool = False,
+    previous_rf_model: bool = None,
 ):
 
     logging.info("Loading data")
@@ -301,7 +304,8 @@ def main(
         test_data_population_1,
         test_data_population_2,
         blosum_inference=blosum_inference,
-        filter_unseen=not blosum_inference,
+        HMM_inference=HMM_inference,
+        filter_unseen=filter_unseen,
         standardise_training_MIC=standardise_training_MIC,
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
     )

@@ -1,4 +1,3 @@
-from operator import itemgetter
 from typing import Dict, Iterable, List
 
 import numpy as np
@@ -49,16 +48,25 @@ class ProfileHMMPredictor:
             hmm_mic_dict[mic] = self._build_hmm(sequences, mic)
         return hmm_mic_dict
 
-    def predict_phenotype(self, seqs: Iterable[str]) -> NDArray:
+    def _get_HMM_hits(self, seqs: Iterable[str]) -> List:
         digital_sequences = [
             pyhmmer.easel.TextSequence(sequence=i).digitize(self.alphabet)
             for i in seqs
         ]
 
-        def get_prediction(seq):
+        def get_hits(seq):
             hits = self.pipeline.scan_seq(seq, self.hmm_mic_dict.values())
-            hits = [[hit.score, float(hit.name)] for hit in hits]
-            hits.sort(key=itemgetter(0))
-            return hits[-1][1]
+            return sorted(hits, key=lambda x: x.score, reverse=True)[0]
 
-        return np.array([get_prediction(seq) for seq in digital_sequences])
+        return [get_hits(seq) for seq in digital_sequences]
+
+    def predict_phenotype(self, seqs: Iterable[str]) -> NDArray:
+        sequence_hits = self._get_HMM_hits(seqs)
+        return np.array([float(hit.name) for hit in sequence_hits])
+
+    def closest_HMM_sequence(self, seqs: Iterable[str]) -> List[str]:
+        sequence_hits = self._get_HMM_hits(seqs)
+        return [
+            self.hmm_mic_dict[float(hit.name)].consensus
+            for hit in sequence_hits
+        ]
