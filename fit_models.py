@@ -295,7 +295,7 @@ def main(
     filter_unseen: bool = False,
     standardise_training_MIC: bool = True,
     standardise_test_and_val_MIC: bool = False,
-    previous_rf_model: bool = None,
+    previous_rf_model: str = None,
 ):
 
     logging.info("Loading data")
