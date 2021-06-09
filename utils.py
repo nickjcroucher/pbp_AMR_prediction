@@ -94,7 +94,6 @@ def load_data(
     train_data_population,
     test_data_population_1,
     test_data_population_2,
-    interactions: Tuple[Tuple[int]] = None,
     blosum_inference: bool = False,
     filter_unseen: bool = True,
     standardise_training_MIC: bool = False,

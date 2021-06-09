@@ -160,7 +160,6 @@ def load_and_format_data(
         train_data_population,
         test_data_population_1,
         test_data_population_2,
-        interactions,
         blosum_inference,
         filter_unseen,
         standardise_training_MIC,
