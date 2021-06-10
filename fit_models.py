@@ -258,9 +258,21 @@ def parse_args():
     )
     parser.add_argument(
         "--blosum_inference",
-        type=bool,
-        default=True,
-        help="If blosum inference is not conducted on then PBP types not found in the train data will be filtered from the test data",  # noqa: E501
+        default=False,
+        action="store_true",
+        help="Use blosum matrix to infer closest sequences to unseen sequences in the test data",  # noqa: E501
+    )
+    parser.add_argument(
+        "--HMM_inference",
+        default=False,
+        action="store_true",
+        help="Use HMM fitted to sequences of each MIC to infer closest sequences to unseen sequences in the test data",  # noqa: E501
+    )
+    parser.add_argument(
+        "--filter_unseen",
+        default=False,
+        action="store_true",
+        help="Filter out the unseen samples in the testing data",
     )
     parser.add_argument(
         "--standardise_training_MIC",
@@ -290,7 +302,7 @@ def main(
     test_data_population_1: str = "pmen",
     test_data_population_2: str = "maela",
     model_type: str = "random_forest",
-    blosum_inference: bool = True,
+    blosum_inference: bool = False,
     HMM_inference: bool = False,
     filter_unseen: bool = False,
     standardise_training_MIC: bool = True,
@@ -417,8 +429,10 @@ def main(
     outdir = f"results/{model_type}"
     if blosum_inference:
         filename = f"train_pop_{train_data_population}_results_blosum_inferred_pbp_types.pkl"  # noqa: E501
-    else:
+    elif filter_unseen:
         filename = f"train_pop_{train_data_population}_results_filtered_pbp_types.pkl"  # noqa: E501
+    elif HMM_inference:
+        filename = f"train_pop_{train_data_population}_results_HMM_inferred_pbp_types.pkl"  # noqa: E501
     save_output(results, filename, outdir)
 
 

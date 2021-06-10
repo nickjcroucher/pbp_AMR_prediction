@@ -293,7 +293,7 @@ def closest_blosum_sequence(
     pbp_data: pd.Series,
     pbp: str,
     training_sequence_array: nptyping.NDArray,
-    blosum_scores: pd.DataFrame,
+    blosum_scores: Dict,
 ):
     """
     pbp: the pbp to match

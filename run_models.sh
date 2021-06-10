@@ -9,8 +9,8 @@ fit_model () {
         test_pop_2=${TEST_POPS[@]:1:1}
 
         # run with testing populations in each order
-        ./fit_models.py --model_type $1 --train_pop $training_pop --test_pop_1 $test_pop_1 --test_pop_2 $test_pop_2
-        ./fit_models.py --model_type $1 --train_pop $training_pop --test_pop_1 $test_pop_2 --test_pop_2 $test_pop_1
+        ./fit_models.py --model_type $1 --train_pop $training_pop --test_pop_1 $test_pop_1 --test_pop_2 $test_pop_2 --HMM_inference
+        ./fit_models.py --model_type $1 --train_pop $training_pop --test_pop_1 $test_pop_2 --test_pop_2 $test_pop_1 --HMM_inference
     
     done
 }
