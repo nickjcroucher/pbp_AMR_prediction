@@ -11,8 +11,9 @@ class ProfileHMMPredictor:
     def __init__(
         self,
         training_data: pd.DataFrame,
-        drop_duplicates_for_training: bool = True,
         pbp_seqs: List[str] = ["a1_seq", "b2_seq", "x2_seq"],
+        drop_duplicates_for_training: bool = True,
+        HMM_per_phenotype: bool = True,
     ):
         self.pbp_seqs = pbp_seqs
         self.alphabet = pyhmmer.easel.Alphabet.amino()
@@ -21,9 +22,14 @@ class ProfileHMMPredictor:
         self.pipeline = pyhmmer.plan7.Pipeline(
             self.alphabet, background=self.background
         )
-        self.hmm_mic_dict = self._phenotype_representative_HMMs(
-            training_data, drop_duplicates_for_training
-        )
+        if HMM_per_phenotype:
+            self.hmm_mic_dict = self._phenotype_representative_HMMs(
+                training_data, drop_duplicates_for_training
+            )
+        else:
+            self.hmm = self._build_hmm(
+                training_data[pbp_seqs].sum(axis=1), 1.0
+            )
 
     def _build_hmm(self, sequences: Iterable[str], mic: float) -> HMM:
         seqs = [

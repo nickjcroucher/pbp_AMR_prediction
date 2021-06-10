@@ -1,6 +1,6 @@
 import datetime
 from functools import lru_cache
-from typing import Dict, Any, Set, Tuple
+from typing import Any, Dict, Set, Tuple
 
 import pandas as pd
 import numpy as np
@@ -28,17 +28,95 @@ def _filter_data(data, train_types, pbp_type, invert=False):
         return data.loc[data[pbp_type].isin(list(inc_types))]
 
 
-def perform_blosum_inference(
+@lru_cache(maxsize=1)
+def parse_blosum_matrix() -> Dict[str, Dict[str, int]]:
+    # return as dict cause quicker to search
+    df = pd.read_csv("blosum62.csv", index_col=0)
+    return {i: df[i].to_dict() for i in df.columns}
+
+
+def closest_sequence(
+    pbp_data: pd.Series,
+    pbp: str,
+    training_sequence_array: nptyping.NDArray,
+    method: str,
+    blosum_scores: Dict = None,
+    hmm_scores: Dict = None,
+):
+    """
+    pbp: the pbp to match
+    pbp_data: series with type and sequence of pbp not in training_data
+    training_sequence_array: array of aligned sequences in the training data
+    """
+    pbp_seq = f"{pbp}_seq"
+    pbp_type = f"{pbp}_type"
+
+    pbp_sequence = pbp_data[pbp_seq]
+
+    def check_amino_acid(AA, pos):
+        """
+        If amino acid AA at is not seen at position pos in the training data
+        will return the closest which is based on the blosum matrix
+        """
+        # all amino acids at that position in the train set
+        training_AAs = training_sequence_array[:, pos]
+
+        if AA in training_AAs:
+            return AA
+
+        AA_comparisons = {}
+        if method == "blosum":
+            # if AA not seen at that position computes the blosum scores for
+            # all that were seen and returns the AA with highest
+            for i in np.unique(training_AAs):
+                AA_comparisons[blosum_scores[AA][i]] = i
+
+        elif method == "hmm":
+            for i in np.unique(training_AAs):
+                AA_comparisons[hmm_scores[pos][i]] = i
+        else:
+            raise ValueError(f"Unknown inference method: {method}")
+
+        # if multiple AAs had the highest score the one which is returned first
+        # will be the one which it found last in the training set. This is
+        # effectively random.
+        return AA_comparisons[max(AA_comparisons.keys())]
+
+    new_pbp_sequence = [
+        check_amino_acid(j, i) for i, j in enumerate(pbp_sequence)
+    ]
+    new_pbp_sequence = "".join(new_pbp_sequence)  # type: ignore
+
+    return pbp_data[pbp_type], new_pbp_sequence, "inferred_type"
+
+
+def HMM_position_scores(training_data: pd.DataFrame, pbp_seq: str) -> Dict:
+    hmm_predictor = ProfileHMMPredictor(
+        training_data, [pbp_seq], HMM_per_phenotype=False
+    )
+    alphabet = hmm_predictor.alphabet.symbols
+
+    # convert to list from pyhmmer object and remove entry probabilities
+    match_emissions = [list(i) for i in hmm_predictor.hmm.match_emissions][1:]
+
+    # nested dictionary with emission prob of each amino acid at each position
+    # in the sequence
+    return {
+        pos: {alphabet[n]: prob for n, prob in enumerate(emissions)}
+        for pos, emissions in enumerate(match_emissions)
+    }
+
+
+def infer_sequences(
     pbp_type: str,
     pbp: str,
     train_types: Set,
     training_data: pd.DataFrame,
     testing_data: pd.DataFrame,
+    method: str,
 ) -> pd.DataFrame:
 
     pbp_seq = f"{pbp}_seq"
-
-    blosum_scores = parse_blosum_matrix()
 
     missing_types_and_sequences = _filter_data(
         testing_data, train_types, pbp_type, invert=True
@@ -54,13 +132,26 @@ def perform_blosum_inference(
         )
     )  # stack sequences in the training data as array of characters
 
-    inferred_sequences = missing_types_and_sequences.apply(
-        closest_blosum_sequence,
-        axis=1,
-        pbp=pbp,
-        training_sequence_array=training_sequence_array,
-        blosum_scores=blosum_scores,
-    )
+    if method == "blosum":
+        inferred_sequences = missing_types_and_sequences.apply(
+            closest_sequence,
+            axis=1,
+            pbp=pbp,
+            training_sequence_array=training_sequence_array,
+            method=method,
+            blosum_scores=parse_blosum_matrix(),
+        )
+
+    elif method == "hmm":
+        inferred_sequences = missing_types_and_sequences.apply(
+            closest_sequence,
+            axis=1,
+            pbp=pbp,
+            training_sequence_array=training_sequence_array,
+            method=method,
+            hmm_scores=HMM_position_scores(training_data, pbp_seq),
+        )
+
     inferred_sequences = inferred_sequences.apply(pd.Series)
     inferred_sequences.rename(
         columns={
@@ -102,7 +193,7 @@ def perform_HMM_inference(
 
     # one model trained on each pbp type
     hmm_predictors = {
-        pbp: ProfileHMMPredictor(train, [pbp]) for pbp in pbp_seqs
+        pbp: ProfileHMMPredictor(train, pbp_seqs=[pbp]) for pbp in pbp_seqs
     }
 
     for pbp in pbp_seqs:
@@ -119,6 +210,7 @@ def load_data(
     test_data_population_2,
     blosum_inference: bool = False,
     HMM_inference: bool = False,
+    HMM_MIC_inference: bool = False,
     filter_unseen: bool = True,
     standardise_training_MIC: bool = False,
     standardise_test_and_val_MIC: bool = False,
@@ -189,14 +281,25 @@ population_2 should be unique and should be either of cdc, maela, or pmen"
 
         # get closest type to all missing in the training data
         if blosum_inference:
-            test_1 = perform_blosum_inference(
-                pbp_type, pbp, train_types, train, test_1
+            test_1 = infer_sequences(
+                pbp_type, pbp, train_types, train, test_1, method="blosum"
             )
-            test_2 = perform_blosum_inference(
-                pbp_type, pbp, train_types, train, test_2
+            test_2 = infer_sequences(
+                pbp_type, pbp, train_types, train, test_2, method="blosum"
             )
-            val = perform_blosum_inference(
-                pbp_type, pbp, train_types, train, val
+            val = infer_sequences(
+                pbp_type, pbp, train_types, train, val, method="blosum"
+            )
+
+        elif HMM_inference:
+            test_1 = infer_sequences(
+                pbp_type, pbp, train_types, train, test_1, method="hmm"
+            )
+            test_2 = infer_sequences(
+                pbp_type, pbp, train_types, train, test_2, method="hmm"
+            )
+            val = infer_sequences(
+                pbp_type, pbp, train_types, train, val, method="hmm"
             )
 
         # filter out everything which isnt in the training data
@@ -207,7 +310,7 @@ population_2 should be unique and should be either of cdc, maela, or pmen"
 
     # replace each sequence in test sets with consensus sequence from HMM
     # fitted to training sequences of each MIC
-    if HMM_inference:
+    if HMM_MIC_inference:
         test_1, test_2, val = perform_HMM_inference(train, test_1, test_2, val)
 
     return train, test_1, test_2, val
@@ -234,8 +337,8 @@ def bin_labels(
     # https://en.wikipedia.org/wiki/Freedman%E2%80%93Diaconis_rule
     IQR = np.subtract(*np.percentile(labels, [75, 25]))
     bin_size = 2 * IQR / (len(labels) ** (1 / 3))
-    bin_size = int(
-        np.ceil(bin_size)
+    bin_size = (
+        bin_size if bin_size >= 1 else 1
     )  # round up cause if less than 1 will not work with accuracy function
 
     min_value = int(np.floor(min(labels)))
@@ -259,6 +362,10 @@ def mean_acc_per_bin(
     """
     assert len(predictions) == len(labels)
 
+    # if there is only one label then mean_acc_per_bin is the same as accuracy
+    if np.unique(labels).shape[0] == 1:
+        return accuracy(predictions, labels)
+
     binned_labels = bin_labels(labels)[0]
 
     df = pd.DataFrame(
@@ -280,59 +387,6 @@ def mean_acc_per_bin(
     bin_accuracies = df.groupby(df.binned_labels).apply(_get_accuracy)
 
     return bin_accuracies.mean()
-
-
-@lru_cache(maxsize=1)
-def parse_blosum_matrix() -> Dict[str, Dict[str, int]]:
-    # return as dict cause quicker to search
-    df = pd.read_csv("blosum62.csv", index_col=0)
-    return {i: df[i].to_dict() for i in df.columns}
-
-
-def closest_blosum_sequence(
-    pbp_data: pd.Series,
-    pbp: str,
-    training_sequence_array: nptyping.NDArray,
-    blosum_scores: Dict,
-):
-    """
-    pbp: the pbp to match
-    pbp_data: series with type and sequence of pbp not in training_data
-    training_sequence_array: array of aligned sequences in the training data
-    """
-    pbp_seq = f"{pbp}_seq"
-    pbp_type = f"{pbp}_type"
-
-    pbp_sequence = pbp_data[pbp_seq]
-
-    def check_amino_acid(AA, pos):
-        """
-        If amino acid AA at is not seen at position pos in the training data
-        will return the closest which is based on the blosum matrix
-        """
-        # all amino acids at that position in the train set
-        training_AAs = training_sequence_array[:, pos]
-
-        if AA in training_AAs:
-            return AA
-
-        # if AA not seen at that position computes the blosum scores for all
-        # that were seen and returns the AA with highest
-        AA_blosum_comparisons = {}
-        for i in np.unique(training_AAs):
-            AA_blosum_comparisons[blosum_scores[AA][i]] = i
-
-        # if multiple AAs had the highest score the one which is returned first
-        # will be the one which it found last in the training set. This is
-        # effectively random.
-        return AA_blosum_comparisons[max(AA_blosum_comparisons.keys())]
-
-    new_pbp_sequence = [
-        check_amino_acid(j, i) for i, j in enumerate(pbp_sequence)
-    ]
-    new_pbp_sequence = "".join(new_pbp_sequence)  # type: ignore
-
-    return pbp_data[pbp_type], new_pbp_sequence, "inferred_type"
 
 
 @dataclass(unsafe_hash=True)

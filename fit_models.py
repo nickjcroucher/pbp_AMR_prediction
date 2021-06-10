@@ -92,7 +92,7 @@ def optimise_hps(
     pbounds: Dict[str, List[float]],
     model_type: str,
     init_points: int = 5,
-    n_iter: int = 10,
+    n_iter: int = 5,
 ) -> BayesianOptimization:
     partial_fitting_function = partial(
         train_evaluate, train=train, test=test, model_type=model_type
@@ -150,6 +150,7 @@ def load_and_format_data(
     interactions: Tuple[Tuple[int]] = None,
     blosum_inference: bool = False,
     HMM_inference: bool = False,
+    HMM_MIC_inference: bool = False,
     filter_unseen: bool = True,
     standardise_training_MIC: bool = False,
     standardise_test_and_val_MIC: bool = False,
@@ -162,6 +163,8 @@ def load_and_format_data(
         test_data_population_1,
         test_data_population_2,
         blosum_inference,
+        HMM_inference,
+        HMM_MIC_inference,
         filter_unseen,
         standardise_training_MIC,
         standardise_test_and_val_MIC,
@@ -263,10 +266,16 @@ def parse_args():
         help="Use blosum matrix to infer closest sequences to unseen sequences in the test data",  # noqa: E501
     )
     parser.add_argument(
-        "--HMM_inference",
+        "--HMM_MIC_inference",
         default=False,
         action="store_true",
         help="Use HMM fitted to sequences of each MIC to infer closest sequences to unseen sequences in the test data",  # noqa: E501
+    )
+    parser.add_argument(
+        "--HMM_inference",
+        default=False,
+        action="store_true",
+        help="Use HMM fitted to all training data to infer closest sequences to unseen sequences in the test data",  # noqa: E501
     )
     parser.add_argument(
         "--filter_unseen",
@@ -304,6 +313,7 @@ def main(
     model_type: str = "random_forest",
     blosum_inference: bool = False,
     HMM_inference: bool = False,
+    HMM_MIC_inference: bool = False,
     filter_unseen: bool = False,
     standardise_training_MIC: bool = True,
     standardise_test_and_val_MIC: bool = False,
@@ -317,6 +327,7 @@ def main(
         test_data_population_2,
         blosum_inference=blosum_inference,
         HMM_inference=HMM_inference,
+        HMM_MIC_inference=HMM_MIC_inference,
         filter_unseen=filter_unseen,
         standardise_training_MIC=standardise_training_MIC,
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
@@ -414,7 +425,9 @@ def main(
         model=model,
         config={
             "blosum_inference": blosum_inference,
-            "filter_unseen": not blosum_inference,
+            "filter_unseen": filter_unseen,
+            "hmm_inference": HMM_inference,
+            "hmm_mic_inference": HMM_MIC_inference,
             "standardise_training_MIC": standardise_training_MIC,
             "standardise_test_and_val_MIC": standardise_test_and_val_MIC,
             "previous_rf_model": previous_rf_model,
@@ -433,6 +446,8 @@ def main(
         filename = f"train_pop_{train_data_population}_results_filtered_pbp_types.pkl"  # noqa: E501
     elif HMM_inference:
         filename = f"train_pop_{train_data_population}_results_HMM_inferred_pbp_types.pkl"  # noqa: E501
+    elif HMM_MIC_inference:
+        filename = f"train_pop_{train_data_population}_results_HMM_MIC_inferred_pbp_types.pkl"  # noqa: E501
     save_output(results, filename, outdir)
 
 

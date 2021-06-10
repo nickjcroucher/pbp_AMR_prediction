@@ -12,12 +12,9 @@ fit_model () {
         ./fit_models.py --model_type $1 --train_pop $training_pop --test_pop_1 $test_pop_1 --test_pop_2 $test_pop_2 --HMM_inference
         ./fit_models.py --model_type $1 --train_pop $training_pop --test_pop_1 $test_pop_2 --test_pop_2 $test_pop_1 --HMM_inference
     
+        ./fit_models.py --model_type $1 --train_pop $training_pop --test_pop_1 $test_pop_1 --test_pop_2 $test_pop_2 --HMM_MIC_inference
+        ./fit_models.py --model_type $1 --train_pop $training_pop --test_pop_1 $test_pop_2 --test_pop_2 $test_pop_1 --HMM_MIC_inference
     done
 }
 
-MODELS=("random_forest" "DBSCAN" "DBSCAN_with_UMAP")
-
-for model in $MODELS
-do
-    fit_model $model
-done
+fit_model "random_forest"
