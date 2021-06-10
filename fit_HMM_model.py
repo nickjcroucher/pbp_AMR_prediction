@@ -60,11 +60,14 @@ def main(
     pbp_seqs = ["a1_seq", "b2_seq", "x2_seq"]
 
     train, test_1, test_2, val = load_data(
-        train_data_population,
-        test_data_population_1,
-        test_data_population_2,
-        standardise_training_MIC,
-        standardise_test_and_val_MIC,
+        train_data_population=train_data_population,
+        test_data_population_1=test_data_population_1,
+        test_data_population_2=test_data_population_2,
+        blosum_inference=False,
+        HMM_inference=False,
+        filter_unseen=False,
+        standardise_training_MIC=standardise_training_MIC,
+        standardise_test_and_val_MIC=standardise_test_and_val_MIC,
     )
 
     logging.info("Fitting model")
