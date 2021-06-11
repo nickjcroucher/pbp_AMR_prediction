@@ -54,7 +54,8 @@ def closest_sequence(
 
     pbp_sequence = pbp_data[pbp_seq]
 
-    hmm_consensus_seq = hmm_predictor.closest_HMM_sequence([pbp_sequence])[0]  # type: ignore # noqa: E501
+    if method == "hmm_mic":
+        hmm_consensus_seq = hmm_predictor.closest_HMM_sequence([pbp_sequence])[0]  # type: ignore # noqa: E501
 
     def check_amino_acid(AA, pos):
         """

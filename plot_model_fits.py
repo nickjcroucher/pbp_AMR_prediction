@@ -16,6 +16,7 @@ def plot_metrics(
     all_metrics: Dict[str, pd.DataFrame], train_pop: str, output_dir: str
 ):
     for metric, metric_data in all_metrics.items():
+        plt.clf()
         df = all_metrics[metric]
         df.rename(columns={"score": metric}, inplace=True)
         g = sns.FacetGrid(
@@ -34,6 +35,7 @@ def plot_metrics(
         g.fig.suptitle(f"Models Trained on {train_pop}")
         g.fig.tight_layout()
         plt.savefig(f"{output_dir}/train_pop_{train_pop}_{metric}.png")
+        plt.clf()
 
 
 def process_data(data: List[ResultsContainer]) -> Dict[str, pd.DataFrame]:
