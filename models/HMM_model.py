@@ -15,10 +15,13 @@ class ProfileHMMPredictor:
         pbp_seqs: List[str] = ["a1_seq", "b2_seq", "x2_seq"],
         drop_duplicates_for_training: bool = True,
         HMM_per_phenotype: bool = True,
+        null_model_uniform_frequencies: bool = True,
     ):
         self.pbp_seqs = pbp_seqs
         self.alphabet = pyhmmer.easel.Alphabet.amino()
-        self.background = pyhmmer.plan7.Background(self.alphabet, uniform=True)
+        self.background = pyhmmer.plan7.Background(
+            self.alphabet, uniform=null_model_uniform_frequencies
+        )
         self.builder = pyhmmer.plan7.Builder(self.alphabet)
         self.pipeline = pyhmmer.plan7.Pipeline(
             self.alphabet, background=self.background
