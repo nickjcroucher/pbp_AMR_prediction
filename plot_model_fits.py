@@ -12,7 +12,9 @@ MODELS = ["random_forest", "DBSCAN", "DBSCAN_with_UMAP"]
 POPULATIONS = ["cdc", "pmen", "maela"]
 
 
-def plot_metrics(all_metrics: Dict[str, pd.DataFrame], train_pop: str):
+def plot_metrics(
+    all_metrics: Dict[str, pd.DataFrame], train_pop: str, output_dir: str
+):
     for metric, metric_data in all_metrics.items():
         df = all_metrics[metric]
         df.rename(columns={"score": metric}, inplace=True)
@@ -30,9 +32,8 @@ def plot_metrics(all_metrics: Dict[str, pd.DataFrame], train_pop: str):
         )
         g.fig.subplots_adjust(top=0.9)
         g.fig.suptitle(f"Models Trained on {train_pop}")
-        plt.savefig(
-            f"figures/model_and_pop_permutations/train_pop_{train_pop}_{metric}.png"  # noqa: E501
-        )
+        g.fig.tight_layout()
+        plt.savefig(f"{output_dir}/train_pop_{train_pop}_{metric}.png")
 
 
 def process_data(data: List[ResultsContainer]) -> Dict[str, pd.DataFrame]:
@@ -74,7 +75,9 @@ def process_data(data: List[ResultsContainer]) -> Dict[str, pd.DataFrame]:
             )
             all_metrics[metric]["Model"].extend([results.model_type] * 4)
 
-        all_metrics[metric] = pd.DataFrame(all_metrics[metric])
+        df = pd.DataFrame(all_metrics[metric])
+        df.sort_values(by="Test Population 2", inplace=True)
+        all_metrics[metric] = df
 
     return all_metrics
 
@@ -95,7 +98,11 @@ def main():
     for train_pop in POPULATIONS:
         data = load_data(train_pop)
         all_metrics = process_data(data)
-        plot_metrics(all_metrics, train_pop)
+        plot_metrics(
+            all_metrics,
+            train_pop,
+            output_dir="figures/model_and_pop_permutations/hmm_inferred",
+        )
 
 
 if __name__ == "__main__":
