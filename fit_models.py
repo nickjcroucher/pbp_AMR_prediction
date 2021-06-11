@@ -143,9 +143,9 @@ def filter_features_by_previous_model_fit(
 
 
 def load_and_format_data(
-    train_data_population,
-    test_data_population_1,
-    test_data_population_2,
+    train_data_population: str,
+    test_data_population_1: str,
+    test_data_population_2: str,
     *,
     interactions: Tuple[Tuple[int]] = None,
     blosum_inference: bool = False,
@@ -159,15 +159,15 @@ def load_and_format_data(
     pbp_patterns = ["a1", "b2", "x2"]
 
     train, test_1, test_2, val = load_data(
-        train_data_population,
-        test_data_population_1,
-        test_data_population_2,
-        blosum_inference,
-        HMM_inference,
-        HMM_MIC_inference,
-        filter_unseen,
-        standardise_training_MIC,
-        standardise_test_and_val_MIC,
+        train_data_population=train_data_population,
+        test_data_population_1=test_data_population_1,
+        test_data_population_2=test_data_population_2,
+        blosum_inference=blosum_inference,
+        HMM_inference=HMM_inference,
+        HMM_MIC_inference=HMM_MIC_inference,
+        filter_unseen=filter_unseen,
+        standardise_training_MIC=standardise_training_MIC,
+        standardise_test_and_val_MIC=standardise_test_and_val_MIC,
     )
 
     train_encoded_sequences = encode_sequences(train, pbp_patterns)
@@ -232,7 +232,7 @@ def save_output(results: ResultsContainer, filename: str, outdir: str):
         pickle.dump(results, a)
 
 
-def parse_args():
+def parse_args() -> Dict:
     parser = argparse.ArgumentParser(
         description="Fit predictive model of penicilin MIC to PBP amino acid sequence"  # noqa: E501
     )

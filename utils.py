@@ -42,6 +42,7 @@ def closest_sequence(
     method: str,
     blosum_scores: Dict = None,
     hmm_scores: Dict = None,
+    hmm_predictor: ProfileHMMPredictor = None,
 ):
     """
     pbp: the pbp to match
@@ -52,6 +53,8 @@ def closest_sequence(
     pbp_type = f"{pbp}_type"
 
     pbp_sequence = pbp_data[pbp_seq]
+
+    hmm_consensus_seq = hmm_predictor.closest_HMM_sequence([pbp_sequence])[0]  # type: ignore # noqa: E501
 
     def check_amino_acid(AA, pos):
         """
@@ -64,6 +67,9 @@ def closest_sequence(
         if AA in training_AAs:
             return AA
 
+        if method == "hmm_mic":
+            return hmm_consensus_seq[pos]
+
         AA_comparisons = {}
         if method == "blosum":
             # if AA not seen at that position computes the blosum scores for
@@ -74,6 +80,7 @@ def closest_sequence(
         elif method == "hmm":
             for i in np.unique(training_AAs):
                 AA_comparisons[hmm_scores[pos][i]] = i
+
         else:
             raise ValueError(f"Unknown inference method: {method}")
 
@@ -112,96 +119,98 @@ def infer_sequences(
     pbp: str,
     train_types: Set,
     training_data: pd.DataFrame,
-    testing_data: pd.DataFrame,
-    method: str,
-) -> pd.DataFrame:
-
-    pbp_seq = f"{pbp}_seq"
-
-    missing_types_and_sequences = _filter_data(
-        testing_data, train_types, pbp_type, invert=True
-    )[[pbp_type, pbp_seq]].drop_duplicates()
-
-    training_types_and_sequences = training_data[
-        [pbp_type, pbp_seq]
-    ].drop_duplicates()
-
-    training_sequence_array = np.vstack(
-        training_types_and_sequences[pbp_seq].apply(
-            lambda x: np.array(list(x))
-        )
-    )  # stack sequences in the training data as array of characters
-
-    if method == "blosum":
-        inferred_sequences = missing_types_and_sequences.apply(
-            closest_sequence,
-            axis=1,
-            pbp=pbp,
-            training_sequence_array=training_sequence_array,
-            method=method,
-            blosum_scores=parse_blosum_matrix(),
-        )
-
-    elif method == "hmm":
-        inferred_sequences = missing_types_and_sequences.apply(
-            closest_sequence,
-            axis=1,
-            pbp=pbp,
-            training_sequence_array=training_sequence_array,
-            method=method,
-            hmm_scores=HMM_position_scores(training_data, pbp_seq),
-        )
-
-    inferred_sequences = inferred_sequences.apply(pd.Series)
-    inferred_sequences.rename(
-        columns={
-            0: "original_type",
-            1: "inferred_seq",
-            2: "inferred_type",
-        },
-        inplace=True,
-    )
-
-    testing_data = testing_data.merge(
-        inferred_sequences,
-        left_on=pbp_type,
-        right_on="original_type",
-        how="left",
-    )
-    testing_data[pbp_type].mask(
-        ~testing_data.inferred_type.isna(),
-        testing_data.inferred_type,
-        inplace=True,
-    )
-    testing_data[pbp_seq].mask(
-        ~testing_data.inferred_seq.isna(),
-        testing_data.inferred_seq,
-        inplace=True,
-    )
-
-    return testing_data[training_data.columns]
-
-
-def perform_HMM_inference(
-    train: pd.DataFrame,
     test_1: pd.DataFrame,
     test_2: pd.DataFrame,
     val: pd.DataFrame,
+    method: str,
 ) -> Tuple:
 
-    pbp_seqs = ["a1_seq", "b2_seq", "x2_seq"]
+    pbp_seq = f"{pbp}_seq"
 
-    # one model trained on each pbp type
-    hmm_predictors = {
-        pbp: ProfileHMMPredictor(train, pbp_seqs=[pbp]) for pbp in pbp_seqs
-    }
+    all_testing_data = {"test_1": test_1, "test_2": test_2, "val": val}
 
-    for pbp in pbp_seqs:
-        test_1[pbp] = hmm_predictors[pbp].closest_HMM_sequence(test_1[pbp])
-        test_2[pbp] = hmm_predictors[pbp].closest_HMM_sequence(test_2[pbp])
-        val[pbp] = hmm_predictors[pbp].closest_HMM_sequence(val[pbp])
+    if method == "blosum":
+        blosum_scores = parse_blosum_matrix()
+    elif method == "hmm":
+        hmm_scores = HMM_position_scores(training_data, pbp_seq)
+    elif method == "hmm_mic":
+        hmm_predictor = ProfileHMMPredictor(training_data, [pbp_seq])
 
-    return test_1, test_2, val
+    for name, testing_data in all_testing_data.items():
+        missing_types_and_sequences = _filter_data(
+            testing_data, train_types, pbp_type, invert=True
+        )[[pbp_type, pbp_seq]].drop_duplicates()
+
+        training_types_and_sequences = training_data[
+            [pbp_type, pbp_seq]
+        ].drop_duplicates()
+
+        training_sequence_array = np.vstack(
+            training_types_and_sequences[pbp_seq].apply(
+                lambda x: np.array(list(x))
+            )
+        )  # stack sequences in the training data as array of characters
+
+        if method == "blosum":
+            inferred_sequences = missing_types_and_sequences.apply(
+                closest_sequence,
+                axis=1,
+                pbp=pbp,
+                training_sequence_array=training_sequence_array,
+                method=method,
+                blosum_scores=blosum_scores,
+            )
+
+        elif method == "hmm":
+            inferred_sequences = missing_types_and_sequences.apply(
+                closest_sequence,
+                axis=1,
+                pbp=pbp,
+                training_sequence_array=training_sequence_array,
+                method=method,
+                hmm_scores=hmm_scores,
+            )
+
+        elif method == "hmm_mic":
+            inferred_sequences = missing_types_and_sequences.apply(
+                closest_sequence,
+                axis=1,
+                pbp=pbp,
+                training_sequence_array=training_sequence_array,
+                method=method,
+                hmm_predictor=hmm_predictor,
+            )
+
+        inferred_sequences = inferred_sequences.apply(pd.Series)
+        inferred_sequences.rename(
+            columns={
+                0: "original_type",
+                1: "inferred_seq",
+                2: "inferred_type",
+            },
+            inplace=True,
+        )
+
+        testing_data = testing_data.merge(
+            inferred_sequences,
+            left_on=pbp_type,
+            right_on="original_type",
+            how="left",
+        )
+        testing_data[pbp_type].mask(
+            ~testing_data.inferred_type.isna(),
+            testing_data.inferred_type,
+            inplace=True,
+        )
+        testing_data[pbp_seq].mask(
+            ~testing_data.inferred_seq.isna(),
+            testing_data.inferred_seq,
+            inplace=True,
+        )
+
+        all_testing_data[name] = testing_data[training_data.columns]
+
+    return tuple(all_testing_data.values())
 
 
 def load_data(
@@ -268,6 +277,10 @@ population_2 should be unique and should be either of cdc, maela, or pmen"
     else:
         raise ValueError(f"train_data_population = {train_data_population}")
 
+    # will throw error due to scikit-learn bug when changing columns in
+    # original val object (https://stackoverflow.com/questions/45090639/pandas-shows-settingwithcopywarning-after-train-test-split) # noqa: E501
+    val = val.copy(deep=False)
+
     if standardise_training_MIC:
         train = standardise_MICs(train)
     if standardise_test_and_val_MIC:
@@ -276,30 +289,48 @@ population_2 should be unique and should be either of cdc, maela, or pmen"
         val = standardise_MICs(val)
 
     for pbp in pbp_patterns:
+
         pbp_type = f"{pbp}_type"
         train_types = set(train[pbp_type])
 
-        # get closest type to all missing in the training data
+        # get closest type to all missing in the training data using blosum score # noqa: E501
         if blosum_inference:
-            test_1 = infer_sequences(
-                pbp_type, pbp, train_types, train, test_1, method="blosum"
+            test_1, test_2, val = infer_sequences(
+                pbp_type,
+                pbp,
+                train_types,
+                train,
+                test_1,
+                test_2,
+                val,
+                method="blosum",
             )
-            test_2 = infer_sequences(
-                pbp_type, pbp, train_types, train, test_2, method="blosum"
-            )
-            val = infer_sequences(
-                pbp_type, pbp, train_types, train, val, method="blosum"
+        # get closest type to all missing in the training data using hmm
+        # trained on all the training data
+        elif HMM_inference:
+            test_1, test_2, val = infer_sequences(
+                pbp_type,
+                pbp,
+                train_types,
+                train,
+                test_1,
+                test_2,
+                val,
+                method="hmm",
             )
 
-        elif HMM_inference:
-            test_1 = infer_sequences(
-                pbp_type, pbp, train_types, train, test_1, method="hmm"
-            )
-            test_2 = infer_sequences(
-                pbp_type, pbp, train_types, train, test_2, method="hmm"
-            )
-            val = infer_sequences(
-                pbp_type, pbp, train_types, train, val, method="hmm"
+        # get closest type to all missing in the training data using closest
+        # hmm of hmms trained on each MIC in the training data
+        elif HMM_MIC_inference:
+            test_1, test_2, val = infer_sequences(
+                pbp_type,
+                pbp,
+                train_types,
+                train,
+                test_1,
+                test_2,
+                val,
+                method="hmm_mic",
             )
 
         # filter out everything which isnt in the training data
@@ -307,11 +338,6 @@ population_2 should be unique and should be either of cdc, maela, or pmen"
             test_1 = _filter_data(test_1, train_types, pbp_type)
             test_2 = _filter_data(test_2, train_types, pbp_type)
             val = _filter_data(val, train_types, pbp_type)
-
-    # replace each sequence in test sets with consensus sequence from HMM
-    # fitted to training sequences of each MIC
-    if HMM_MIC_inference:
-        test_1, test_2, val = perform_HMM_inference(train, test_1, test_2, val)
 
     return train, test_1, test_2, val
 

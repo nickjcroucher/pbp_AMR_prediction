@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Dict, Iterable, List
 
 import numpy as np
@@ -47,6 +48,7 @@ class ProfileHMMPredictor:
         unique_sequences: bool = True,
     ) -> Dict:
         hmm_mic_dict = {}  # type: ignore
+        data.loc[:, "log2_mic"] = data.log2_mic.apply(round)
         for mic, sequences in data.groupby("log2_mic"):
             sequences = sequences[self.pbp_seqs].sum(axis=1)
             if unique_sequences:
@@ -55,16 +57,15 @@ class ProfileHMMPredictor:
         return hmm_mic_dict
 
     def _get_HMM_hits(self, seqs: Iterable[str]) -> List:
-        digital_sequences = [
-            pyhmmer.easel.TextSequence(sequence=i).digitize(self.alphabet)
-            for i in seqs
-        ]
-
+        @lru_cache(maxsize=None)
         def get_hits(seq):
+            seq = pyhmmer.easel.TextSequence(sequence=seq).digitize(
+                self.alphabet
+            )
             hits = self.pipeline.scan_seq(seq, self.hmm_mic_dict.values())
             return sorted(hits, key=lambda x: x.score, reverse=True)[0]
 
-        return [get_hits(seq) for seq in digital_sequences]
+        return [get_hits(seq) for seq in seqs]
 
     def predict_phenotype(self, seqs: Iterable[str]) -> NDArray:
         sequence_hits = self._get_HMM_hits(seqs)
@@ -73,6 +74,6 @@ class ProfileHMMPredictor:
     def closest_HMM_sequence(self, seqs: Iterable[str]) -> List[str]:
         sequence_hits = self._get_HMM_hits(seqs)
         return [
-            self.hmm_mic_dict[float(hit.name)].consensus
+            self.hmm_mic_dict[float(hit.name)].consensus.upper()
             for hit in sequence_hits
         ]
