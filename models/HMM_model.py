@@ -50,8 +50,9 @@ class ProfileHMMPredictor:
         data: pd.DataFrame,
         unique_sequences: bool = True,
     ) -> Dict:
-        hmm_mic_dict = {}  # type: ignore
         data.loc[:, "log2_mic"] = data.log2_mic.apply(round)
+        data.sort_values(by="log2_mic", inplace=True)
+        hmm_mic_dict = {}  # type: ignore
         for mic, sequences in data.groupby("log2_mic"):
             sequences = sequences[self.pbp_seqs].sum(axis=1)
             if unique_sequences:
@@ -80,3 +81,19 @@ class ProfileHMMPredictor:
             self.hmm_mic_dict[float(hit.name)].consensus.upper()
             for hit in sequence_hits
         ]
+
+    def all_HMM_scores(self, seqs: Iterable[str]) -> NDArray:
+        @lru_cache(maxsize=None)
+        def get_hmm_scores(seq):
+            seq = pyhmmer.easel.TextSequence(sequence=seq).digitize(
+                self.alphabet
+            )
+            hits = self.pipeline.scan_seq(seq, self.hmm_mic_dict.values())
+            return np.array([hit.score for hit in hits])
+
+        return np.array([get_hmm_scores(seq) for seq in seqs])
+
+
+def get_HMM_scores(hmm_predictor: ProfileHMMPredictor, pbps: List[str], *args):
+    sequences = [data[pbps].sum(axis=1) for data in args]
+    return [hmm_predictor.all_HMM_scores(seqs) for seqs in sequences]

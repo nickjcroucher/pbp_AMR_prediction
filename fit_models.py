@@ -22,6 +22,7 @@ from data_preprocessing.parse_pbp_data import encode_sequences
 from model_analysis.parse_random_forest import DecisionTree_
 from models.supervised_models import _fit_en, _fit_lasso, _fit_rf
 from models.unsupervised_models import _fit_DBSCAN, _fit_DBSCAN_with_UMAP
+from models.HMM_model import get_HMM_scores, ProfileHMMPredictor
 from utils import (
     accuracy,
     load_data,
@@ -152,6 +153,8 @@ def load_and_format_data(
     HMM_inference: bool = False,
     HMM_MIC_inference: bool = False,
     filter_unseen: bool = True,
+    include_HMM_scores: bool = False,
+    just_HMM_scores: bool = False,
     standardise_training_MIC: bool = False,
     standardise_test_and_val_MIC: bool = False,
 ) -> Dict:
@@ -174,6 +177,57 @@ def load_and_format_data(
     test_1_encoded_sequences = encode_sequences(test_1, pbp_patterns)
     test_2_encoded_sequences = encode_sequences(test_2, pbp_patterns)
     val_encoded_sequences = encode_sequences(val, pbp_patterns)
+
+    if include_HMM_scores or just_HMM_scores:
+        train_encoded_dense = train_encoded_sequences.todense()
+        test_1_encoded_dense = test_1_encoded_sequences.todense()
+        test_2_encoded_dense = test_2_encoded_sequences.todense()
+        val_encoded_dense = val_encoded_sequences.todense()
+
+        if just_HMM_scores:
+            train_encoded_dense = np.zeros((train_encoded_dense.shape[0], 1))
+            test_1_encoded_dense = np.zeros((test_1_encoded_dense.shape[0], 1))
+            test_2_encoded_dense = np.zeros((test_2_encoded_dense.shape[0], 1))
+            val_encoded_dense = np.zeros((val_encoded_dense.shape[0], 1))
+
+        for pbp in pbp_patterns:
+            (
+                train_scores,
+                test_1_scores,
+                test_2_scores,
+                val_scores,
+            ) = get_HMM_scores(
+                ProfileHMMPredictor(train, [f"{pbp}_seq"]),
+                [f"{pbp}_seq"],
+                train,
+                test_1,
+                test_2,
+                val,
+            )
+            train_encoded_dense = np.concatenate(
+                (train_encoded_dense, train_scores), axis=1
+            )
+
+            test_1_encoded_dense = np.concatenate(
+                (test_1_encoded_dense, test_1_scores), axis=1
+            )
+            test_2_encoded_dense = np.concatenate(
+                (test_2_encoded_dense, test_2_scores), axis=1
+            )
+            val_encoded_dense = np.concatenate(
+                (val_encoded_dense, val_scores), axis=1
+            )
+
+        if just_HMM_scores:  # remove empty first column
+            train_encoded_dense = train_encoded_dense[:, 1:]
+            test_1_encoded_dense = test_1_encoded_dense[:, 1:]
+            test_2_encoded_dense = test_2_encoded_dense[:, 1:]
+            val_encoded_dense = val_encoded_dense[:, 1:]
+
+        train_encoded_sequences = csr_matrix(train_encoded_dense)
+        test_1_encoded_sequences = csr_matrix(test_1_encoded_dense)
+        test_2_encoded_sequences = csr_matrix(test_2_encoded_dense)
+        val_encoded_sequences = csr_matrix(val_encoded_dense)
 
     X_train, y_train = train_encoded_sequences, train.log2_mic
     X_test_1, y_test_1 = test_1_encoded_sequences, test_1.log2_mic
@@ -284,6 +338,18 @@ def parse_args() -> Dict:
         help="Filter out the unseen samples in the testing data",
     )
     parser.add_argument(
+        "--include_HMM_scores",
+        default=False,
+        action="store_true",
+        help="Use HMM scores as additional features in the model",
+    )
+    parser.add_argument(
+        "--just_HMM_scores",
+        default=False,
+        action="store_true",
+        help="Use HMM scores as ONLY features in the model",
+    )
+    parser.add_argument(
         "--standardise_training_MIC",
         type=bool,
         default=True,
@@ -315,6 +381,8 @@ def main(
     HMM_inference: bool = False,
     HMM_MIC_inference: bool = False,
     filter_unseen: bool = False,
+    include_HMM_scores: bool = False,
+    just_HMM_scores: bool = False,
     standardise_training_MIC: bool = True,
     standardise_test_and_val_MIC: bool = False,
     previous_rf_model: str = None,
@@ -329,6 +397,8 @@ def main(
         HMM_inference=HMM_inference,
         HMM_MIC_inference=HMM_MIC_inference,
         filter_unseen=filter_unseen,
+        include_HMM_scores=include_HMM_scores,
+        just_HMM_scores=just_HMM_scores,
         standardise_training_MIC=standardise_training_MIC,
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
     )
@@ -355,9 +425,9 @@ def main(
     elif model_type == "random_forest":
         pbounds = {
             "n_estimators": [1000, 10000],
-            "max_depth": [2, 5],
+            "max_depth": [1, 5],
             "min_samples_split": [2, 10],
-            "min_samples_leaf": [2, 2],
+            "min_samples_leaf": [2, 6],
         }
     elif model_type == "DBSCAN":
         pbounds = {
@@ -428,6 +498,8 @@ def main(
             "filter_unseen": filter_unseen,
             "hmm_inference": HMM_inference,
             "hmm_mic_inference": HMM_MIC_inference,
+            "hmm_scores_as_features": include_HMM_scores,
+            "hmm_scores_as_only_features": just_HMM_scores,
             "standardise_training_MIC": standardise_training_MIC,
             "standardise_test_and_val_MIC": standardise_test_and_val_MIC,
             "previous_rf_model": previous_rf_model,
