@@ -16,7 +16,7 @@ from sklearn.linear_model import Lasso
 from sklearn.metrics import mean_squared_error
 
 from bayesian_interaction_model import BayesianLinearModel
-from fit_models import fit_model, load_data, optimise_hps
+from fit_models import fit_model, load_and_format_data, optimise_hps
 from model_analysis.interrogate_rf import load_model
 from model_analysis.parse_random_forest import (
     DecisionTree_,
@@ -274,7 +274,13 @@ def plot_CI_accuracies(
     plt.savefig(os.path.join(outdir, "model_prediction_accuracies.png"))
 
 
-def main(blosum_inference=False, filter_unseen=False):
+def main(
+    train_data_population: str,
+    test_data_population_1: str,
+    test_data_population_2: str,
+    blosum_inference: bool = False,
+    filter_unseen: bool = False,
+):
 
     model_type = "lasso"
     pbounds = {"alpha": [0.05, 1.95]}
@@ -285,18 +291,20 @@ def main(blosum_inference=False, filter_unseen=False):
 
     interactions = [i[0] for i in paired_sf_p_values if i[1] < 0.05]
 
-    train, test, pmen = load_data(
-        validation_data="pmen",
+    data = load_and_format_data(
+        train_data_population,
+        test_data_population_1,
+        test_data_population_2,
+        interactions=interactions,
         blosum_inference=blosum_inference,
         filter_unseen=filter_unseen,
-        interactions=interactions,
+        standardise_training_MIC=True,
     )
-    maela = load_data(
-        validation_data="maela",
-        blosum_inference=blosum_inference,
-        filter_unseen=filter_unseen,
-        interactions=interactions,
-    )[-1]
+
+    train = data["train"]
+    test = data["test_1"]
+    test_2 = data["test_2"]
+    val = data["val"]
 
     logging.info("Optimising the model for the test data accuracy")
     optimizer = optimise_hps(
@@ -311,30 +319,55 @@ def main(blosum_inference=False, filter_unseen=False):
     )  # get best model fit
 
     train_predictions = model.predict(train[0])
-    test_predictions = model.predict(test[0])
-    validate_predictions = model.predict(pmen[0])
+    test_predictions_1 = model.predict(test[0])
+    test_predictions_2 = model.predict(test_2[0])
+    validate_predictions = model.predict(val[0])
 
     results = ResultsContainer(  # noqa: F841
         training_predictions=train_predictions,
-        testing_predictions=test_predictions,
         validation_predictions=validate_predictions,
-        training_MSE=mean_squared_error(train[1], train_predictions),
-        testing_MSE=mean_squared_error(test[1], test_predictions),
-        validation_MSE=mean_squared_error(pmen[1], validate_predictions),
-        training_accuracy=accuracy(train_predictions, train[1]),
-        testing_accuracy=accuracy(test_predictions, test[1]),
-        validation_accuracy=accuracy(validate_predictions, pmen[1]),
-        training_mean_acc_per_bin=mean_acc_per_bin(
-            train_predictions, train[1]
+        testing_predictions_1=test_predictions_1,
+        testing_predictions_2=test_predictions_2,
+        training_MSE=mean_squared_error(data["train"][1], train_predictions),
+        validation_MSE=mean_squared_error(
+            data["val"][1], validate_predictions
         ),
-        testing_mean_acc_per_bin=mean_acc_per_bin(test_predictions, test[1]),
+        testing_MSE_1=mean_squared_error(
+            data["test_1"][1], test_predictions_1
+        ),
+        testing_MSE_2=mean_squared_error(
+            data["test_2"][1], test_predictions_2
+        ),
+        training_accuracy=accuracy(train_predictions, data["train"][1]),
+        validation_accuracy=accuracy(validate_predictions, data["val"][1]),
+        testing_accuracy_1=accuracy(test_predictions_1, data["test_1"][1]),
+        testing_accuracy_2=accuracy(test_predictions_2, data["test_2"][1]),
+        training_mean_acc_per_bin=mean_acc_per_bin(
+            train_predictions, data["train"][1]
+        ),
         validation_mean_acc_per_bin=mean_acc_per_bin(
-            validate_predictions, pmen[1]
+            validate_predictions, data["val"][1]
+        ),
+        testing_mean_acc_per_bin_1=mean_acc_per_bin(
+            test_predictions_1, data["test_1"][1]
+        ),
+        testing_mean_acc_per_bin_2=mean_acc_per_bin(
+            test_predictions_2, data["test_2"][1]
         ),
         hyperparameters=optimizer.max["params"],
         model_type=model_type,
         model=model,
+        config={
+            "blosum_inference": blosum_inference,
+            "filter_unseen": filter_unseen,
+            "standardise_training_MIC": True,
+            "train_val_population": data["train"].population,
+            "test_1_population": data["test_1"].population,
+            "test_2_population": data["test_2"].population,
+        },
     )
+
+    print(results)
 
     plot_simulations(
         results.model.sparse_coef_.count_nonzero(), results.testing_MSE
@@ -346,9 +379,9 @@ def main(blosum_inference=False, filter_unseen=False):
     training_features = filter_lasso_features(
         train[0].todense(), results.model
     )
-    testing_features = filter_lasso_features(test[0].todense(), results.model)
-    pmen_features = filter_lasso_features(pmen[0].todense(), results.model)
-    maela_features = filter_lasso_features(maela[0].todense(), results.model)
+    val_features = filter_lasso_features(val[0].todense(), results.model)
+    test_1_features = filter_lasso_features(test[0].todense(), results.model)
+    test_2_features = filter_lasso_features(test_2[0].todense(), results.model)
 
     # fit bayesian model
     bayesian_lm = bayesian_linear_model(training_features, train[1])
@@ -356,19 +389,19 @@ def main(blosum_inference=False, filter_unseen=False):
 
     # distributional predictions for each dataset
     train_bayes_predictions = bayesian_lm.predict(training_features)
-    test_bayes_predictions = bayesian_lm.predict(testing_features)
-    pmen_bayes_predictions = bayesian_lm.predict(pmen_features)
-    maela_bayes_predictions = bayesian_lm.predict(maela_features)
+    val_bayes_predictions = bayesian_lm.predict(val_features)
+    test_1_bayes_predictions = bayesian_lm.predict(test_1_features)
+    test_2_bayes_predictions = bayesian_lm.predict(test_2_features)
 
     plot_CI_accuracies(
         train_bayes_predictions,
         train[1].values,
-        test_bayes_predictions,
+        val_bayes_predictions,
+        val[1].values,
+        test_1_bayes_predictions,
         test[1].values,
-        pmen_bayes_predictions,
-        pmen[1].values,
-        maela_bayes_predictions,
-        maela[1].values,
+        test_2_bayes_predictions,
+        test_2[1].values,
         bayesian_lm.output_dir,
     )
 
