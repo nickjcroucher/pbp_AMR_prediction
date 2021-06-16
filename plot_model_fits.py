@@ -84,11 +84,11 @@ def process_data(data: List[ResultsContainer]) -> Dict[str, pd.DataFrame]:
     return all_metrics
 
 
-def load_data(train_pop: str) -> List[ResultsContainer]:
+def load_data(train_pop: str, inference_method: str) -> List[ResultsContainer]:
     all_data = []
     for model in MODELS:
-        file_path_1 = f"results/{model}/train_pop_{train_pop}_results_blosum_inferred_pbp_types.pkl"  # noqa: E501
-        file_path_2 = f"results/{model}/train_pop_{train_pop}_results_blosum_inferred_pbp_types(1).pkl"  # noqa: E501
+        file_path_1 = f"results/{model}/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types.pkl"  # noqa: E501
+        file_path_2 = f"results/{model}/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types(1).pkl"  # noqa: E501
         for fp in [file_path_1, file_path_2]:
             with open(fp, "rb") as a:
                 all_data.append(pickle.load(a))
@@ -98,7 +98,7 @@ def load_data(train_pop: str) -> List[ResultsContainer]:
 
 def main():
     for train_pop in POPULATIONS:
-        data = load_data(train_pop)
+        data = load_data(train_pop, "HMM_MIC")
         all_metrics = process_data(data)
         plot_metrics(
             all_metrics,
