@@ -29,7 +29,7 @@ class BayesianLinearModel:
         beta_mean: int = 0,
         beta_sd: int = 1,
     ):
-        self.data = {
+        self.data = {  # type: ignore
             "N": self.features.shape[0],
             "K": self.features.shape[1],
             "x": self.features,

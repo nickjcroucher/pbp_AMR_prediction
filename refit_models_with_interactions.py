@@ -275,18 +275,27 @@ def plot_CI_accuracies(
 
 
 def main(
-    train_data_population: str,
-    test_data_population_1: str,
-    test_data_population_2: str,
+    train_data_population: str = "cdc",
+    test_data_population_1: str = "pmen",
+    test_data_population_2: str = "maela",
     blosum_inference: bool = False,
+    HMM_inference: bool = False,
+    HMM_MIC_inference: bool = False,
     filter_unseen: bool = False,
+    include_HMM_scores: bool = False,
+    just_HMM_scores: bool = False,
+    standardise_training_MIC: bool = True,
+    standardise_test_and_val_MIC: bool = False,
 ):
 
     model_type = "lasso"
     pbounds = {"alpha": [0.05, 1.95]}
 
     logging.info("Loading inferred interaction data")
-    with open("results/intermediates/paired_sf_p_values.pkl", "rb") as a:
+    with open(
+        f"results/intermediates/{train_data_population}/paired_sf_p_values.pkl",
+        "rb",
+    ) as a:
         paired_sf_p_values = pickle.load(a)
 
     interactions = [i[0] for i in paired_sf_p_values if i[1] < 0.05]
@@ -297,8 +306,13 @@ def main(
         test_data_population_2,
         interactions=interactions,
         blosum_inference=blosum_inference,
+        HMM_inference=HMM_inference,
+        HMM_MIC_inference=HMM_MIC_inference,
         filter_unseen=filter_unseen,
-        standardise_training_MIC=True,
+        include_HMM_scores=include_HMM_scores,
+        just_HMM_scores=just_HMM_scores,
+        standardise_training_MIC=standardise_training_MIC,
+        standardise_test_and_val_MIC=standardise_test_and_val_MIC,
     )
 
     train = data["train"]
