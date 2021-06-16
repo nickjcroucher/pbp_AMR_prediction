@@ -55,7 +55,17 @@ def closest_sequence(
     pbp_sequence = pbp_data[pbp_seq]
 
     if method == "hmm_mic":
-        hmm_consensus_seq = hmm_predictor.closest_HMM_sequence([pbp_sequence])[0]  # type: ignore # noqa: E501
+        closest_hmm = hmm_predictor.closest_HMM([pbp_sequence])[  # type: ignore # noqa: E501
+            0
+        ]
+        match_emissions = [list(i) for i in closest_hmm.match_emissions][1:]
+        closest_hmm_scores = {
+            pos: {
+                closest_hmm.alphabet.symbols[n]: prob
+                for n, prob in enumerate(emissions)
+            }
+            for pos, emissions in enumerate(match_emissions)
+        }
 
     def check_amino_acid(AA, pos):
         """
@@ -68,9 +78,6 @@ def closest_sequence(
         if AA in training_AAs:
             return AA
 
-        if method == "hmm_mic":
-            return hmm_consensus_seq[pos]
-
         AA_comparisons = {}
         if method == "blosum":
             # if AA not seen at that position computes the blosum scores for
@@ -81,6 +88,11 @@ def closest_sequence(
         elif method == "hmm":
             for i in np.unique(training_AAs):
                 AA_comparisons[hmm_scores[pos][i]] = i
+
+        elif method == "hmm_mic":
+            hmm_scores
+            for i in np.unique(training_AAs):
+                AA_comparisons[closest_hmm_scores[pos][i]] = i
 
         else:
             raise ValueError(f"Unknown inference method: {method}")
@@ -281,6 +293,7 @@ population_2 should be unique and should be either of cdc, maela, or pmen"
     # will throw error due to scikit-learn bug when changing columns in
     # original val object (https://stackoverflow.com/questions/45090639/pandas-shows-settingwithcopywarning-after-train-test-split) # noqa: E501
     val = val.copy(deep=False)
+    train = train.copy(deep=False)
 
     if standardise_training_MIC:
         train = standardise_MICs(train)

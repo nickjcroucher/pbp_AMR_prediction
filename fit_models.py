@@ -148,7 +148,7 @@ def load_and_format_data(
     test_data_population_1: str,
     test_data_population_2: str,
     *,
-    interactions: Tuple[Tuple[int]] = None,
+    interactions: Union[List, Tuple[Tuple[int]]] = None,
     blosum_inference: bool = False,
     HMM_inference: bool = False,
     HMM_MIC_inference: bool = False,

@@ -75,12 +75,9 @@ class ProfileHMMPredictor:
         sequence_hits = self._get_HMM_hits(seqs)
         return np.array([float(hit.name) for hit in sequence_hits])
 
-    def closest_HMM_sequence(self, seqs: Iterable[str]) -> List[str]:
+    def closest_HMM(self, seqs: Iterable[str]) -> List[str]:
         sequence_hits = self._get_HMM_hits(seqs)
-        return [
-            self.hmm_mic_dict[float(hit.name)].consensus.upper()
-            for hit in sequence_hits
-        ]
+        return [self.hmm_mic_dict[float(hit.name)] for hit in sequence_hits]
 
     def all_HMM_scores(self, seqs: Iterable[str]) -> NDArray:
         @lru_cache(maxsize=None)
