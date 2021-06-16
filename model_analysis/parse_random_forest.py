@@ -1,3 +1,5 @@
+import inspect
+import os
 import warnings
 from itertools import compress
 from math import ceil
@@ -150,8 +152,12 @@ class JlApi:
                 Main,
             )
 
+        filename = inspect.getframeinfo(inspect.currentframe()).filename
+        path = os.path.dirname(os.path.abspath(filename))
+        julia_module = os.path.join(path, "co_occuring_feature_pairs.jl")
+
         self.jl_main = Main
-        self.jl_main.eval('include("co_occuring_feature_pairs.jl")')
+        self.jl_main.eval(f'include("{julia_module}")')
         self.jl_main.eval("using .ParseRF")
 
 
