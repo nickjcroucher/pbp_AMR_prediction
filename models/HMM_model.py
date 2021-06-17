@@ -30,10 +30,12 @@ class ProfileHMMPredictor:
             self.hmm_mic_dict = self._phenotype_representative_HMMs(
                 training_data, drop_duplicates_for_training
             )
+            self.hmm = None
         else:
             self.hmm = self._build_hmm(
                 training_data[pbp_seqs].sum(axis=1), 1.0
             )
+            self.hmm_mic_dict = None  # type: ignore
 
     def _build_hmm(self, sequences: Iterable[str], mic: float) -> HMM:
         seqs = [
@@ -80,13 +82,22 @@ class ProfileHMMPredictor:
         return [self.hmm_mic_dict[float(hit.name)] for hit in sequence_hits]
 
     def all_HMM_scores(self, seqs: Iterable[str]) -> NDArray:
+        """
+        Either returns one score for the HMM trained on the whole dataset or
+        one per HMM in self.hmm_mic_dict
+        """
+
         @lru_cache(maxsize=None)
         def get_hmm_scores(seq):
             seq = pyhmmer.easel.TextSequence(sequence=seq).digitize(
                 self.alphabet
             )
-            hits = self.pipeline.scan_seq(seq, self.hmm_mic_dict.values())
-            return np.array([hit.score for hit in hits])
+            if self.hmm_mic_dict is not None:
+                hits = self.pipeline.scan_seq(seq, self.hmm_mic_dict.values())
+                return np.array([hit.score for hit in hits])
+            else:
+                hit = self.pipeline.search_hmm(self.hmm, [seq])[0]
+                return hit.score
 
         return np.array([get_hmm_scores(seq) for seq in seqs])
 
