@@ -277,7 +277,7 @@ def save_output(results: ResultsContainer, filename: str, outdir: str):
         split_path = file_path.split(".")
         path_minus_ext = "".join(split_path[:-1])
         if i > 1:
-            path_minus_ext = path_minus_ext[:-3]
+            path_minus_ext = path_minus_ext[:-3]  # remove brackets and number
         ext = split_path[-1]
         file_path = path_minus_ext + f"({i})." + ext
         i += 1
@@ -425,7 +425,7 @@ def main(
     elif model_type == "random_forest":
         pbounds = {
             "n_estimators": [1000, 10000],
-            "max_depth": [1, 5],
+            "max_depth": [1, 20],
             "min_samples_split": [2, 10],
             "min_samples_leaf": [2, 6],
         }
@@ -512,6 +512,10 @@ def main(
     print(results)
 
     outdir = f"results/{model_type}"
+    if just_HMM_scores:
+        outdir = os.path.join(outdir, "just_HMM_scores")
+    elif include_HMM_scores:
+        outdir = os.path.join(outdir, "include_HMM_scores")
     if blosum_inference:
         filename = f"train_pop_{train_data_population}_results_blosum_inferred_pbp_types.pkl"  # noqa: E501
     elif filter_unseen:
