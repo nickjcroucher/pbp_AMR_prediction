@@ -36,6 +36,9 @@ be embedded"
             clustering.core_sample_indices_
         ]
         self.reducer = reducer
+        self.core_sample_cluster_labels = self.clustering.labels_[
+            self.clustering.core_sample_indices_
+        ]
 
     def predict(self, samples: Union[NDArray, csr_matrix]) -> NDArray:
         if isinstance(samples, csr_matrix):
@@ -50,10 +53,23 @@ be embedded"
             distances_to_core_samples = cdist(
                 samples, self.core_sample_features, "hamming"
             )
-        predictions = self.core_sample_labels.iloc[
-            np.argmin(distances_to_core_samples, axis=1)
+
+        def mean_label_of_closest_cluster(dists):
+            cluster_distances = {
+                np.mean(
+                    dists[np.where(self.core_sample_cluster_labels == i)[0]]
+                ): i
+                for i in np.unique(self.core_sample_cluster_labels)
+            }
+            closest_cluster = cluster_distances[min(cluster_distances)]
+            return self.core_sample_labels.iloc[
+                np.where(self.core_sample_cluster_labels == closest_cluster)[0]
+            ].mean()
+
+        predictions = [
+            mean_label_of_closest_cluster(i) for i in distances_to_core_samples
         ]
-        return predictions.values
+        return np.array(predictions)
 
 
 def _fit_DBSCAN(
