@@ -423,12 +423,20 @@ def main(
     elif model_type == "lasso":
         pbounds = {"alpha": [0.05, 1.95]}
     elif model_type == "random_forest":
-        pbounds = {
-            "n_estimators": [1000, 10000],
-            "max_depth": [1, 20],
-            "min_samples_split": [2, 10],
-            "min_samples_leaf": [2, 6],
-        }
+        if just_HMM_scores:
+            pbounds = {
+                "n_estimators": [50, 500],
+                "max_depth": [1, 5],
+                "min_samples_split": [2, 10],
+                "min_samples_leaf": [2, 6],
+            }
+        else:
+            pbounds = {
+                "n_estimators": [1000, 10000],
+                "max_depth": [1, 20],
+                "min_samples_split": [2, 10],
+                "min_samples_leaf": [2, 6],
+            }
     elif model_type == "DBSCAN":
         pbounds = {
             "log_eps": [log10(0.0001), log10(0.1)],
