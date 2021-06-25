@@ -1,3 +1,4 @@
+import os
 import matplotlib.pyplot as plt
 import pickle
 from typing import Dict, List
@@ -15,6 +16,8 @@ POPULATIONS = ["cdc", "pmen", "maela"]
 def plot_metrics(
     all_metrics: Dict[str, pd.DataFrame], train_pop: str, output_dir: str
 ):
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
     for metric, metric_data in all_metrics.items():
         plt.clf()
         df = all_metrics[metric]
@@ -84,11 +87,18 @@ def process_data(data: List[ResultsContainer]) -> Dict[str, pd.DataFrame]:
     return all_metrics
 
 
-def load_data(train_pop: str, inference_method: str) -> List[ResultsContainer]:
+def load_data(
+    train_pop: str, inference_method: str, just_hmm_scores: bool = False
+) -> List[ResultsContainer]:
     all_data = []
     for model in MODELS:
-        file_path_1 = f"results/{model}/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types.pkl"  # noqa: E501
-        file_path_2 = f"results/{model}/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types(1).pkl"  # noqa: E501
+        if just_hmm_scores:
+            file_path_1 = f"results/{model}/just_HMM_scores/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types.pkl"  # noqa: E501
+            file_path_2 = f"results/{model}/just_HMM_scores/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types(1).pkl"  # noqa: E501
+        else:
+            file_path_1 = f"results/{model}/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types.pkl"  # noqa: E501
+            file_path_2 = f"results/{model}/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types(1).pkl"  # noqa: E501
+
         for fp in [file_path_1, file_path_2]:
             with open(fp, "rb") as a:
                 all_data.append(pickle.load(a))
