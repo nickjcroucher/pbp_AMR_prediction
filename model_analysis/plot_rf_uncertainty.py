@@ -79,7 +79,10 @@ def main(
     pi_acc_dict = {}
     for d in ["train", "val", "test_1", "test_2"]:
         prediction_dist = rf_prediction_distribution(data[d][0], model)
-        intervals = np.array(list(range(5, 100, 5))) / 100
+        increments = np.array(list(range(5, 100, 5))) / 100
+        intervals = list(
+            zip(increments[:9], sorted(increments[10:], reverse=True))
+        )
         pi_accuracies = pd.DataFrame(
             {
                 "Accuracy": [
