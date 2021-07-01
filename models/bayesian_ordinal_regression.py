@@ -1,5 +1,6 @@
 from typing import Iterable
 
+import matplotlib.pyplot as plt
 import numpyro
 from jax import numpy as jnp
 from jax import random
@@ -12,6 +13,7 @@ from numpyro.distributions import (
     constraints,
 )
 from numpyro.infer import MCMC, NUTS, Predictive
+import seaborn as sns
 
 
 class BayesianOrdinalRegression:
@@ -64,3 +66,43 @@ class BayesianOrdinalRegression:
         return Predictive(
             self._model, posterior_samples=self.mcmc.get_samples()
         )(self.mcmc_key, X)["Y"]
+
+    def plot_posteriors(self, n, param_type):
+        param_name = f"{param_type}_{n}"
+        param = self.mcmc.get_samples()[param_type][:, n]  # posterior samples
+        mean = jnp.mean(param)
+        median = jnp.median(param)
+        CI_lower = jnp.percentile(param, 2.5)
+        CI_upper = jnp.percentile(param, 97.5)
+
+        plt.clf()
+
+        # trace plot
+        plt.subplot(2, 1, 1)
+        plt.plot(param)
+        plt.xlabel("samples")
+        plt.ylabel(param_name)
+        plt.axhline(mean, color="r", lw=2, linestyle="--")
+        plt.axhline(median, color="c", lw=2, linestyle="--")
+        plt.axhline(CI_lower, linestyle=":", color="k", alpha=0.2)
+        plt.axhline(CI_upper, linestyle=":", color="k", alpha=0.2)
+
+        # density plot
+        plt.subplot(2, 1, 2)
+        plt.hist(param, 30, density=True)
+        sns.kdeplot(param, shade=True)
+        plt.xlabel(param_name)
+        plt.ylabel("density")
+        plt.axvline(mean, color="r", lw=2, linestyle="--", label="mean")
+        plt.axvline(median, color="c", lw=2, linestyle="--", label="median")
+        plt.axvline(
+            CI_lower, linestyle=":", color="k", alpha=0.2, label="95% CI"
+        )
+        plt.axvline(CI_upper, linestyle=":", color="k", alpha=0.2)
+
+        plt.title(f"Trace and Posterior Distribution for {param_name}")
+        plt.gcf().tight_layout()
+        plt.legend()
+        plt.show()
+
+        plt.clf()
