@@ -67,7 +67,7 @@ class BayesianOrdinalRegression:
             self._model, posterior_samples=self.mcmc.get_samples()
         )(self.mcmc_key, X)["Y"]
 
-    def plot_posteriors(self, n, param_type):
+    def plot_posteriors(self, n: int, param_type: str):
         param_name = f"{param_type}_{n}"
         param = self.mcmc.get_samples()[param_type][:, n]  # posterior samples
         mean = jnp.mean(param)
