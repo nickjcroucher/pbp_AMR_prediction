@@ -20,7 +20,7 @@ from sklearn.metrics import mean_squared_error
 
 from data_preprocessing.parse_pbp_data import encode_sequences
 from model_analysis.parse_random_forest import DecisionTree_
-from models.supervised_models import _fit_en, _fit_lasso, _fit_rf
+from models.supervised_models import _fit_en, _fit_lasso, _fit_rf, _fit_ord_reg
 from models.unsupervised_models import _fit_DBSCAN, _fit_DBSCAN_with_UMAP
 from models.HMM_model import get_HMM_scores, ProfileHMMPredictor
 from utils import (
@@ -44,6 +44,9 @@ def fit_model(
 
     elif model_type == "DBSCAN_with_UMAP":
         reg = _fit_DBSCAN_with_UMAP(train, **kwargs)
+
+    elif model_type == "bayesian_ord_reg":
+        reg = _fit_ord_reg(train, **kwargs)
 
     else:
         # lasso and en models require iterative fitting

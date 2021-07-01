@@ -1,4 +1,5 @@
 import datetime
+import math
 from functools import lru_cache
 from typing import Any, Dict, Set, Tuple
 
@@ -485,3 +486,27 @@ class ResultsContainer:
             + f"Testing Data 1 MSE = {self.testing_MSE_1}\n"
             + f"Testing Data 2 MSE = {self.testing_MSE_2}\n"
         )
+
+
+def ordinal_regression_format(data: Dict) -> Dict:
+    x = np.array(data["train"][0].todense())
+    y = data["train"][1].apply(math.floor)
+
+    y_train = pd.Series(pd.Categorical(y, sorted(y.unique()), ordered=True))
+    data["train"][1] = y_train
+
+    idx = ~np.apply_along_axis(lambda X: all(X == 1) or all(X == 0), 0, x)
+    x_train = x[:, idx]
+    data["train"][0] = x_train
+
+    for i in ["val", "test_1", "test_2"]:
+        x = np.array(data[i][0].todense())
+        y = data[i][1].apply(math.floor)
+        y = pd.Series(
+            pd.Categorical(y, sorted(y_train.unique()), ordered=True)
+        )
+
+        data[i][0] = x[:, idx]
+        data[i][1] = y[np.isin(y, y_train)]
+
+    return data
