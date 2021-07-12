@@ -2,6 +2,7 @@ from typing import Tuple, Union
 
 import numpy as np
 from nptyping import NDArray
+from pandas import Series
 from scipy.sparse import csr_matrix
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import ElasticNet, Lasso
@@ -45,9 +46,7 @@ def _fit_lasso(
 
 
 def _fit_ord_reg(
-    train: Tuple[Union[csr_matrix, NDArray], NDArray],
-    x_dim: int,
-    n_classes: int,
+    train: Tuple[Union[csr_matrix, NDArray], Union[Series, NDArray]],
     beta_prior_sd: float = 1.0,
     num_warmup: int = 250,
     num_samples: int = 750,
@@ -55,6 +54,8 @@ def _fit_ord_reg(
     x = train[0]
     if isinstance(x, csr_matrix):
         x = x.todense()
+    x_dim = x.shape[1]
+    n_classes = len(set(train[1]))
     reg = BayesianOrdinalRegression(
         x, train[1], x_dim, n_classes, beta_prior_sd
     )
