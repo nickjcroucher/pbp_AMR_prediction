@@ -8,6 +8,7 @@ from jax import numpy as jnp
 from jax import random
 from jax.interpreters.xla import _DeviceArray
 from numpyro import sample
+from numpyro.diagnostics import gelman_rubin
 from numpyro.distributions import (
     ImproperUniform,
     Normal,
@@ -158,7 +159,27 @@ class BayesianOrdinalRegression:
 
         plt.clf()
 
+    def test_convergence(self) -> float:
+        """
+        Returns the fraction of model parameters for which the gelman-rubin
+        statistic is greater than 1.2
+        """
 
+        def param_gr_stats(param, i):
+            chains = jnp.array_split(
+                self.posterior_samples[param][:, i], self.num_chains
+            )
+            return gelman_rubin(jnp.stack(chains))
+
+        gr_stats = [param_gr_stats("b_X_eta", i) for i in range(self.X_dim)]
+        gr_stats.extend(
+            [param_gr_stats("c_y", i) for i in range(self.n_classes)]
+        )
+
+        return len([i for i in gr_stats if i > 1.2]) / len(gr_stats)
+
+
+# can't pickle mcmc.kernel so use this hack to save and reload models
 def save_bayesian_ordinal_regression(
     model: BayesianOrdinalRegression, filename: str
 ):
