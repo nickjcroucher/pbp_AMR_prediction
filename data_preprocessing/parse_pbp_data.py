@@ -9,6 +9,29 @@ from sklearn.preprocessing import OneHotEncoder
 from scipy import sparse
 from scipy.stats.distributions import norm
 
+AMINO_ACIDS = [
+    "A",
+    "C",
+    "G",
+    "H",
+    "I",
+    "L",
+    "M",
+    "P",
+    "S",
+    "T",
+    "V",
+    "D",
+    "E",
+    "F",
+    "K",
+    "N",
+    "Q",
+    "R",
+    "W",
+    "Y",
+]
+
 
 def get_pbp_sequence(
     pbp_pattern: str, df: pd.DataFrame, cols: pd.Series
@@ -20,6 +43,8 @@ def get_pbp_sequence(
 def parse_pmen_and_maela(
     pmen: pd.DataFrame, cdc: pd.DataFrame, pbp_patterns: List[str]
 ) -> pd.DataFrame:
+
+    pmen = filter_incomplete_sequences(pmen)
 
     cols = pmen.columns.to_series()
     pbp_seqs = {pbp: get_pbp_sequence(pbp, pmen, cols) for pbp in pbp_patterns}
@@ -125,6 +150,55 @@ def parse_cdc(cdc: pd.DataFrame, pbp_patterns: List[str]) -> pd.DataFrame:
     return cdc_seqs
 
 
+def parse_extended_sequences(
+    data: pd.DataFrame, pbp_patterns: List[str]
+) -> pd.DataFrame:
+
+    data = filter_incomplete_sequences(data)
+
+    cols = data.columns.to_series()
+    pbp_seqs = {pbp: get_pbp_sequence(pbp, data, cols) for pbp in pbp_patterns}
+    df = pd.DataFrame(pbp_seqs)
+
+    df["id"] = data.id
+    df["mic"] = data.mic
+    df = df.loc[~pd.isna(df.mic)]  # drop samples with missing mic
+    df.reindex()
+    df["id"] = df.index.astype(str)
+
+    for pbp in pbp_patterns:
+        seqs = pd.DataFrame(df[pbp].drop_duplicates())
+        seqs["n"] = list(range(len(seqs)))
+        df[f"{pbp}_type"] = df.merge(seqs, on=pbp, how="left").n
+
+    df.a1_type = df.a1_type.astype(str)
+    df.b2_type = df.b2_type.astype(str)
+    df.x2_type = df.x2_type.astype(str)
+
+    return pd.DataFrame(
+        {
+            "id": df.id,
+            "isolates": df.a1_type + "-" + df.b2_type + "-" + df.x2_type,
+            "mic": df.mic,
+            "log2_mic": df.mic.apply(log2),
+            "a1_type": df.a1_type,
+            "b2_type": df.b2_type,
+            "x2_type": df.x2_type,
+            "a1_seq": df.a1,
+            "b2_seq": df.b2,
+            "x2_seq": df.x2,
+        }
+    )
+
+
+def filter_incomplete_sequences(data: pd.DataFrame) -> pd.DataFrame:
+    aa_sequences = data[
+        [i for i in data.columns.tolist() if i not in ["id", "mic"]]
+    ]
+    data = data[aa_sequences.isin(AMINO_ACIDS).all(axis=1)]
+    return data.reset_index(drop=True)
+
+
 def standardise_MICs(df: pd.DataFrame) -> pd.DataFrame:
     """
     Where there is more than one MIC per isolate, fit a normal distribution
@@ -195,29 +269,6 @@ def encode_sequences(
     """
     One hot encoding of sequences
     """
-    amino_acids = [
-        "A",
-        "C",
-        "G",
-        "H",
-        "I",
-        "L",
-        "M",
-        "P",
-        "S",
-        "T",
-        "V",
-        "D",
-        "E",
-        "F",
-        "K",
-        "N",
-        "Q",
-        "R",
-        "W",
-        "Y",
-    ]
-
     pbp_seqs = [i + "_seq" for i in pbp_patterns]
     # have to check all sequences of each type are same length because they are
     # combined into one before being encoded
@@ -232,10 +283,10 @@ def encode_sequences(
         n_var = len(sequences.iloc[0])
 
         # format as array for encoder
-        sequences = np.array(sequences.apply(list).to_list()).astype(np.object)  # type: ignore noqa: E501
+        sequences = np.array(sequences.apply(list).to_list()).astype(np.object)  # type: ignore # noqa: E501
         enc = OneHotEncoder(
             handle_unknown="error",
-            categories=[amino_acids for i in range(n_var)],
+            categories=[AMINO_ACIDS for i in range(n_var)],
             sparse=False,
             dtype=int,
         )

@@ -7,7 +7,7 @@ import pickle
 import warnings
 from functools import partial
 from math import log10
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from bayes_opt import BayesianOptimization
@@ -26,6 +26,7 @@ from models.HMM_model import get_HMM_scores, ProfileHMMPredictor
 from utils import (
     accuracy,
     load_data,
+    load_extended_sequence_data,
     mean_acc_per_bin,
     ResultsContainer,
 )
@@ -149,8 +150,7 @@ def filter_features_by_previous_model_fit(
 def load_and_format_data(
     train_data_population: str,
     test_data_population_1: str,
-    test_data_population_2: str,
-    *,
+    test_data_population_2: Optional[str] = None,
     interactions: Union[List, Tuple[Tuple[int]]] = None,
     blosum_inference: bool = False,
     HMM_inference: bool = False,
@@ -160,82 +160,108 @@ def load_and_format_data(
     just_HMM_scores: bool = False,
     standardise_training_MIC: bool = False,
     standardise_test_and_val_MIC: bool = False,
+    extended_sequences: bool = False,
 ) -> Dict:
 
     pbp_patterns = ["a1", "b2", "x2"]
 
-    train, test_1, test_2, val = load_data(
-        train_data_population=train_data_population,
-        test_data_population_1=test_data_population_1,
-        test_data_population_2=test_data_population_2,
-        blosum_inference=blosum_inference,
-        HMM_inference=HMM_inference,
-        HMM_MIC_inference=HMM_MIC_inference,
-        filter_unseen=filter_unseen,
-        standardise_training_MIC=standardise_training_MIC,
-        standardise_test_and_val_MIC=standardise_test_and_val_MIC,
-    )
+    if extended_sequences and sorted(
+        [train_data_population, test_data_population_1]
+    ) != ["maela", "pmen"]:
+        raise ValueError(
+            "Extended sequence data is only available for pmen and maela"
+        )
 
-    train_encoded_sequences = encode_sequences(train, pbp_patterns)
-    test_1_encoded_sequences = encode_sequences(test_1, pbp_patterns)
-    test_2_encoded_sequences = encode_sequences(test_2, pbp_patterns)
-    val_encoded_sequences = encode_sequences(val, pbp_patterns)
+    if extended_sequences:
+        train, test_1, val = load_extended_sequence_data(
+            train_data_population=train_data_population,
+            blosum_inference=blosum_inference,
+            HMM_inference=HMM_inference,
+            HMM_MIC_inference=HMM_MIC_inference,
+            filter_unseen=filter_unseen,
+            standardise_training_MIC=standardise_training_MIC,
+            standardise_test_and_val_MIC=standardise_test_and_val_MIC,
+        )
+        original_datasets = {"train": train, "test_1": test_1, "val": val}
+    else:
+        train, test_1, test_2, val = load_data(
+            train_data_population=train_data_population,
+            test_data_population_1=test_data_population_1,
+            test_data_population_2=test_data_population_2,  # type: ignore
+            blosum_inference=blosum_inference,
+            HMM_inference=HMM_inference,
+            HMM_MIC_inference=HMM_MIC_inference,
+            filter_unseen=filter_unseen,
+            standardise_training_MIC=standardise_training_MIC,
+            standardise_test_and_val_MIC=standardise_test_and_val_MIC,
+        )
+        original_datasets = {
+            "train": train,
+            "test_1": test_1,
+            "test_2": test_2,
+            "val": val,
+        }
+
+    datasets = {
+        k: encode_sequences(v, pbp_patterns)
+        for k, v in original_datasets.items()
+    }
 
     if include_HMM_scores or just_HMM_scores:
-        train_encoded_dense = train_encoded_sequences.todense()
-        test_1_encoded_dense = test_1_encoded_sequences.todense()
-        test_2_encoded_dense = test_2_encoded_sequences.todense()
-        val_encoded_dense = val_encoded_sequences.todense()
+        datasets = {k: v.todense() for k, v in datasets.items()}
 
         if just_HMM_scores:
-            train_encoded_dense = np.zeros((train_encoded_dense.shape[0], 1))
-            test_1_encoded_dense = np.zeros((test_1_encoded_dense.shape[0], 1))
-            test_2_encoded_dense = np.zeros((test_2_encoded_dense.shape[0], 1))
-            val_encoded_dense = np.zeros((val_encoded_dense.shape[0], 1))
+            datasets = {
+                k: np.zeros((v.shape[0], 1)) for k, v in datasets.items()
+            }
 
         for pbp in pbp_patterns:
-            (
-                train_scores,
-                test_1_scores,
-                test_2_scores,
-                val_scores,
-            ) = get_HMM_scores(
-                ProfileHMMPredictor(train, [f"{pbp}_seq"]),
-                [f"{pbp}_seq"],
-                train,
-                test_1,
-                test_2,
-                val,
-            )
-            train_encoded_dense = np.concatenate(
-                (train_encoded_dense, train_scores), axis=1
-            )
-
-            test_1_encoded_dense = np.concatenate(
-                (test_1_encoded_dense, test_1_scores), axis=1
-            )
-            test_2_encoded_dense = np.concatenate(
-                (test_2_encoded_dense, test_2_scores), axis=1
-            )
-            val_encoded_dense = np.concatenate(
-                (val_encoded_dense, val_scores), axis=1
-            )
+            if extended_sequences:
+                (train_scores, test_1_scores, val_scores,) = get_HMM_scores(
+                    ProfileHMMPredictor(train, [f"{pbp}_seq"]),
+                    [f"{pbp}_seq"],
+                    train,
+                    test_1,
+                    val,
+                )
+                hmm_scores = {
+                    "train": train_scores,
+                    "test_1": test_1_scores,
+                    "val": val_scores,
+                }
+            else:
+                (
+                    train_scores,
+                    test_1_scores,
+                    test_2_scores,
+                    val_scores,
+                ) = get_HMM_scores(
+                    ProfileHMMPredictor(train, [f"{pbp}_seq"]),
+                    [f"{pbp}_seq"],
+                    train,
+                    test_1,
+                    test_2,
+                    val,
+                )
+                hmm_scores = {
+                    "train": train_scores,
+                    "test_1": test_1_scores,
+                    "test_2": test_2_scores,
+                    "val": val_scores,
+                }
+            datasets = {
+                k: np.concatenate((v, hmm_scores[k]), axis=1)
+                for k, v in datasets.items()
+            }
 
         if just_HMM_scores:  # remove empty first column
-            train_encoded_dense = train_encoded_dense[:, 1:]
-            test_1_encoded_dense = test_1_encoded_dense[:, 1:]
-            test_2_encoded_dense = test_2_encoded_dense[:, 1:]
-            val_encoded_dense = val_encoded_dense[:, 1:]
+            datasets = {k: v[:, 1:] for k, v in datasets.items()}
 
-        train_encoded_sequences = csr_matrix(train_encoded_dense)
-        test_1_encoded_sequences = csr_matrix(test_1_encoded_dense)
-        test_2_encoded_sequences = csr_matrix(test_2_encoded_dense)
-        val_encoded_sequences = csr_matrix(val_encoded_dense)
+        datasets = {k: csr_matrix(v) for k, v in datasets.items()}
 
-    X_train, y_train = train_encoded_sequences, train.log2_mic
-    X_test_1, y_test_1 = test_1_encoded_sequences, test_1.log2_mic
-    X_test_2, y_test_2 = test_2_encoded_sequences, test_2.log2_mic
-    X_validate, y_validate = val_encoded_sequences, val.log2_mic
+    datasets = {
+        k: (v, original_datasets[k]["log2_mic"]) for k, v in datasets.items()
+    }
 
     def interact(data, interacting_features):
         interacting_features = np.concatenate(
@@ -245,10 +271,10 @@ def load_and_format_data(
         return csr_matrix(interacting_features)
 
     if interactions is not None:
-        X_train = interact(X_train.todense(), interactions)
-        X_test_1 = interact(X_test_1.todense(), interactions)
-        X_test_2 = interact(X_test_2.todense(), interactions)
-        X_validate = interact(X_validate.todense(), interactions)
+        datasets = {
+            k: [interact(v[0].todense(), interactions), v[1]]
+            for k, v in datasets.items()
+        }
 
     class DataList(list):
         def __init__(self, population: str):
@@ -258,13 +284,17 @@ def load_and_format_data(
         "train": DataList(train_data_population),
         "val": DataList(train_data_population),
         "test_1": DataList(test_data_population_1),
-        "test_2": DataList(test_data_population_2),
     }
+    if test_data_population_2 is not None:
+        data_dictionary["test_2"] = DataList(test_data_population_2)
 
-    data_dictionary["train"].extend([X_train, y_train])
-    data_dictionary["val"].extend([X_validate, y_validate])
-    data_dictionary["test_1"].extend([X_test_1, y_test_1])
-    data_dictionary["test_2"].extend([X_test_2, y_test_2])
+    data_dictionary["train"].extend(datasets["train"])
+    data_dictionary["val"].extend(datasets["val"])
+    data_dictionary["test_1"].extend(datasets["test_1"])
+    try:
+        data_dictionary["test_2"].extend(datasets["test_2"])
+    except KeyError:
+        pass
 
     return data_dictionary
 
@@ -371,6 +401,12 @@ def parse_args() -> Dict:
         default=None,
         help="Used to filter features",
     )
+    parser.add_argument(
+        "--extended_sequences",
+        type=bool,
+        default=False,
+        help="Fit model to extended sequences",
+    )
 
     return vars(parser.parse_args())  # return as a dictionary
 
@@ -378,7 +414,7 @@ def parse_args() -> Dict:
 def main(
     train_data_population: str = "cdc",
     test_data_population_1: str = "pmen",
-    test_data_population_2: str = "maela",
+    test_data_population_2: Optional[str] = "maela",
     model_type: str = "random_forest",
     blosum_inference: bool = False,
     HMM_inference: bool = False,
@@ -389,6 +425,7 @@ def main(
     standardise_training_MIC: bool = True,
     standardise_test_and_val_MIC: bool = False,
     previous_rf_model: str = None,
+    extended_sequences: bool = False,
 ):
 
     logging.info("Loading data")
@@ -404,6 +441,7 @@ def main(
         just_HMM_scores=just_HMM_scores,
         standardise_training_MIC=standardise_training_MIC,
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
+        extended_sequences=extended_sequences,
     )
 
     # filter features by things which have been used by previously fitted model
@@ -470,7 +508,7 @@ def main(
     test_predictions_1 = model.predict(data["test_1"][0])
     test_predictions_2 = model.predict(data["test_2"][0])
 
-    results = ResultsContainer(  # noqa: F841
+    results = ResultsContainer(
         training_predictions=train_predictions,
         validation_predictions=validate_predictions,
         testing_predictions_1=test_predictions_1,

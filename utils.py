@@ -1,7 +1,7 @@
 import datetime
 import math
 from functools import lru_cache
-from typing import Any, Dict, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 import pandas as pd
 import numpy as np
@@ -12,6 +12,7 @@ from sklearn.model_selection import train_test_split
 from data_preprocessing.parse_pbp_data import (
     parse_cdc,
     parse_pmen_and_maela,
+    parse_extended_sequences,
     standardise_MICs,
 )
 from models.HMM_model import ProfileHMMPredictor
@@ -132,16 +133,12 @@ def infer_sequences(
     pbp_type: str,
     pbp: str,
     train_types: Set,
-    training_data: pd.DataFrame,
-    test_1: pd.DataFrame,
-    test_2: pd.DataFrame,
-    val: pd.DataFrame,
     method: str,
-) -> Tuple:
+    training_data: pd.DataFrame,
+    **all_testing_data: Dict[str, pd.DataFrame],
+) -> Dict:
 
     pbp_seq = f"{pbp}_seq"
-
-    all_testing_data = {"test_1": test_1, "test_2": test_2, "val": val}
 
     if method == "blosum":
         blosum_scores = parse_blosum_matrix()
@@ -224,13 +221,79 @@ def infer_sequences(
 
         all_testing_data[name] = testing_data[training_data.columns]
 
-    return tuple(all_testing_data.values())
+    return all_testing_data
+
+
+def _data_processing(
+    pbp_patterns: List[str],
+    standardise_training_MIC: bool,
+    standardise_test_and_val_MIC: bool,
+    blosum_inference: bool,
+    HMM_inference: bool,
+    HMM_MIC_inference: bool,
+    filter_unseen: bool,
+    train: pd.DataFrame,
+    **test_datasets: Dict[str, pd.DataFrame],
+):
+    if standardise_training_MIC:
+        train = standardise_MICs(train)
+    if standardise_test_and_val_MIC:
+        test_datasets = {
+            k: standardise_MICs(v) for k, v in test_datasets.items()
+        }
+
+    for pbp in pbp_patterns:
+
+        pbp_type = f"{pbp}_type"
+        train_types = set(train[pbp_type])
+
+        # get closest type to all missing in the training data using blosum score # noqa: E501
+        if blosum_inference:
+            test_datasets = infer_sequences(
+                pbp_type,
+                pbp,
+                train_types,
+                method="blosum",
+                training_data=train,
+                **test_datasets,
+            )
+        # get closest type to all missing in the training data using hmm
+        # trained on all the training data
+        elif HMM_inference:
+            test_datasets = infer_sequences(
+                pbp_type,
+                pbp,
+                train_types,
+                method="hmm",
+                training_data=train,
+                **test_datasets,
+            )
+        # get closest type to all missing in the training data using closest
+        # hmm of hmms trained on each MIC in the training data
+        elif HMM_MIC_inference:
+            test_datasets = infer_sequences(
+                pbp_type,
+                pbp,
+                train_types,
+                method="hmm_mic",
+                training_data=train,
+                **test_datasets,
+            )
+
+        # filter out everything which isnt in the training data
+        elif filter_unseen:
+            test_datasets = {
+                k: _filter_data(v, train_types, pbp_type)
+                for k, v in test_datasets.items()
+            }
+
+    return tuple([train] + list(test_datasets.values()))
 
 
 def load_data(
-    train_data_population,
-    test_data_population_1,
-    test_data_population_2,
+    train_data_population: str,
+    test_data_population_1: str,
+    test_data_population_2: str,
     blosum_inference: bool = False,
     HMM_inference: bool = False,
     HMM_MIC_inference: bool = False,
@@ -296,65 +359,71 @@ population_2 should be unique and should be either of cdc, maela, or pmen"
     val = val.copy(deep=False)
     train = train.copy(deep=False)
 
-    if standardise_training_MIC:
-        train = standardise_MICs(train)
-    if standardise_test_and_val_MIC:
-        test_1 = standardise_MICs(test_1)
-        test_2 = standardise_MICs(test_2)
-        val = standardise_MICs(val)
+    return _data_processing(
+        pbp_patterns,
+        standardise_training_MIC,
+        standardise_test_and_val_MIC,
+        blosum_inference,
+        HMM_inference,
+        HMM_MIC_inference,
+        filter_unseen,
+        train=train,
+        test_1=test_1,
+        test_2=test_2,
+        val=val,
+    )
 
-    for pbp in pbp_patterns:
 
-        pbp_type = f"{pbp}_type"
-        train_types = set(train[pbp_type])
+def load_extended_sequence_data(
+    train_data_population: str,
+    blosum_inference: bool = False,
+    HMM_inference: bool = False,
+    HMM_MIC_inference: bool = False,
+    filter_unseen: bool = True,
+    standardise_training_MIC: bool = False,
+    standardise_test_and_val_MIC: bool = False,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
-        # get closest type to all missing in the training data using blosum score # noqa: E501
-        if blosum_inference:
-            test_1, test_2, val = infer_sequences(
-                pbp_type,
-                pbp,
-                train_types,
-                train,
-                test_1,
-                test_2,
-                val,
-                method="blosum",
-            )
-        # get closest type to all missing in the training data using hmm
-        # trained on all the training data
-        elif HMM_inference:
-            test_1, test_2, val = infer_sequences(
-                pbp_type,
-                pbp,
-                train_types,
-                train,
-                test_1,
-                test_2,
-                val,
-                method="hmm",
-            )
+    if (
+        len([i for i in [blosum_inference, HMM_inference, filter_unseen] if i])
+        > 1
+    ):
+        raise ValueError(
+            "At most one of blosum inference, HMM_inference, or filter_unseen can be true"  # noqa: E501
+        )
+    pbp_patterns = ["a1", "b2", "x2"]
 
-        # get closest type to all missing in the training data using closest
-        # hmm of hmms trained on each MIC in the training data
-        elif HMM_MIC_inference:
-            test_1, test_2, val = infer_sequences(
-                pbp_type,
-                pbp,
-                train_types,
-                train,
-                test_1,
-                test_2,
-                val,
-                method="hmm_mic",
-            )
+    pmen = pd.read_csv("../data/pneumo_pbp/pmen_full_pbp_seqs_mic.csv")
+    maela = pd.read_csv("../data/pneumo_pbp/maela_full_pbp_mic.csv")
 
-        # filter out everything which isnt in the training data
-        elif filter_unseen:
-            test_1 = _filter_data(test_1, train_types, pbp_type)
-            test_2 = _filter_data(test_2, train_types, pbp_type)
-            val = _filter_data(val, train_types, pbp_type)
+    if train_data_population == "maela":
+        maela = parse_extended_sequences(maela, pbp_patterns)
+        test = parse_pmen_and_maela(pmen, maela, pbp_patterns)
+        train, val = train_test_split(maela, test_size=0.33, random_state=0)
+    elif train_data_population == "pmen":
+        pmen = parse_extended_sequences(pmen, pbp_patterns)
+        test = parse_pmen_and_maela(maela, pmen, pbp_patterns)
+        train, val = train_test_split(pmen, test_size=0.33, random_state=0)
+    else:
+        raise ValueError(f"train_data_population = {train_data_population}")
 
-    return train, test_1, test_2, val
+    # will throw error due to scikit-learn bug when changing columns in
+    # original val object (https://stackoverflow.com/questions/45090639/pandas-shows-settingwithcopywarning-after-train-test-split) # noqa: E501
+    val = val.copy(deep=False)
+    train = train.copy(deep=False)
+
+    return _data_processing(
+        pbp_patterns,
+        standardise_training_MIC,
+        standardise_test_and_val_MIC,
+        blosum_inference,
+        HMM_inference,
+        HMM_MIC_inference,
+        filter_unseen,
+        train=train,
+        test_1=test,
+        val=val,
+    )
 
 
 def accuracy(
