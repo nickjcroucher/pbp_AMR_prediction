@@ -557,14 +557,21 @@ class ResultsContainer:
         )
 
 
-def ordinal_regression_format(data: Dict) -> Dict:
+def ordinal_regression_format(
+    data: Dict, minor_variant_frequency: float
+) -> Dict:
     x = np.array(data["train"][0].todense())
     y = data["train"][1].apply(math.floor)
+
+    lower_freq_threshold = round(minor_variant_frequency * len(x))
+    upper_freq_threshold = len(x) - lower_freq_threshold
 
     y_train = pd.Series(pd.Categorical(y, sorted(y.unique()), ordered=True))
     data["train"][1] = y_train
 
-    idx = ~np.apply_along_axis(lambda X: all(X == 1) or all(X == 0), 0, x)
+    idx = (lower_freq_threshold <= np.count_nonzero(x, axis=0)) & (
+        upper_freq_threshold >= np.count_nonzero(x, axis=0)
+    )
     x_train = x[:, idx]
     data["train"][0] = x_train
 
