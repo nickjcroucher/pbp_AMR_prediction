@@ -43,12 +43,15 @@ class BayesianOrdinalRegression:
         self.beta_prior_sd = beta_prior_sd
         self.mcmc_key = random.PRNGKey(1234)
         self.num_chains = num_chains
+        self.kernel = NUTS(self._model)
         self.posterior_samples = None
-        self.mcmc_last_state = None
+        self.last_mcmc_state = None
 
     def _model(self, X, Y=None):
         b_X_eta = sample(
-            "b_X_eta", Normal(0, jnp.array([self.beta_prior_sd] * self.X_dim))
+            "b_X_eta",
+            Normal(0, self.beta_prior_sd),
+            sample_shape=(self.X_dim,),
         )  # betas for each X are drawn from normal distribution
         c_y = sample(
             "c_y",
@@ -68,46 +71,17 @@ class BayesianOrdinalRegression:
         num_warmup: int = 2500,
         num_samples: int = 7500,
     ):
-        kernel = NUTS(self._model)
-
-        if self.mcmc_last_state is None:
-            self.mcmc = MCMC(
-                kernel,
-                num_warmup=num_warmup,
-                num_samples=num_samples,
-                num_chains=self.num_chains,
-                jit_model_args=True,
-            )
-        else:
-            if num_warmup != 0:
-                print(
-                    "Starting sampling from previously saved state, ignoring num_warmup argument"  # noqa: E501
-                )
-            self.mcmc = MCMC(
-                kernel,
-                num_warmup=0,
-                num_samples=num_samples,
-                num_chains=self.num_chains,
-                jit_model_args=True,
-            )
-
-        if self.mcmc_last_state is None:
-            self.mcmc.run(self.mcmc_key, self.X, self.Y)
-        else:
-            self.mcmc.run(self.mcmc_last_state.rng_key, self.X, self.Y)
-
-        self.mcmc_last_state = self.mcmc.last_state  # store final state
-
-        if self.posterior_samples is None:
-            self.posterior_samples = self.mcmc.get_samples()
-        else:
-            self.posterior_samples = {
-                k: jnp.concatenate(
-                    [v, self.mcmc.get_samples()[k]],
-                    axis=0,
-                )
-                for k, v in self.posterior_samples.items()
-            }
+        self.mcmc = MCMC(
+            self.kernel,
+            num_warmup=num_warmup,
+            num_samples=num_samples,
+            num_chains=self.num_chains,
+        )
+        self.mcmc.run(
+            self.mcmc_key, self.X, self.Y, init_params=self.last_mcmc_state
+        )
+        self.posterior_samples = self.mcmc.get_samples()
+        self.last_mcmc_state = self.mcmc.last_state
 
     def predict(self, X: Iterable) -> _DeviceArray:
         if not isinstance(X, _DeviceArray):
@@ -159,24 +133,33 @@ class BayesianOrdinalRegression:
 
         plt.clf()
 
-    def test_convergence(self) -> float:
-        """
-        Returns the fraction of model parameters for which the gelman-rubin
-        statistic is greater than 1.2
-        """
-
+    def gelman_rubin_stats(self):
         def param_gr_stats(param, i):
             chains = jnp.array_split(
                 self.posterior_samples[param][:, i], self.num_chains
             )
             return gelman_rubin(jnp.stack(chains))
 
-        gr_stats = [param_gr_stats("b_X_eta", i) for i in range(self.X_dim)]
-        gr_stats.extend(
-            [param_gr_stats("c_y", i) for i in range(self.n_classes)]
+        gr_stats = {
+            f"b_X_eta_{i}": param_gr_stats("b_X_eta", i)
+            for i in range(self.X_dim)
+        }
+        gr_stats.update(
+            {
+                f"c_y_{i}": param_gr_stats("c_y", i)
+                for i in range(self.n_classes)
+            }
         )
 
-        return len([i for i in gr_stats if i > 1.2]) / len(gr_stats)
+        return gr_stats
+
+    def test_convergence(self) -> float:
+        """
+        Returns the fraction of model parameters for which the gelman-rubin
+        statistic is greater than 1.2
+        """
+        gr_stats = self.gelman_rubin_stats()
+        return len([i for i in gr_stats.values() if i > 1.2]) / len(gr_stats)
 
 
 # can't pickle mcmc.kernel so use this hack to save and reload models
@@ -191,8 +174,8 @@ def save_bayesian_ordinal_regression(
         "beta_prior_sd": model.beta_prior_sd,
         "mcmc_key": model.mcmc_key,
         "posterior_samples": model.posterior_samples,
-        "mcmc_last_state": model.mcmc_last_state,
         "num_chains": model.num_chains,
+        "last_mcmc_state": model.last_mcmc_state,
     }
     with open(filename, "wb") as a:
         pickle.dump(attributes_dict, a)
@@ -214,6 +197,6 @@ def load_bayesian_ordinal_regression(
     )
     model.mcmc_key = attributes_dict["mcmc_key"]
     model.posterior_samples = attributes_dict["posterior_samples"]
-    model.mcmc_last_state = attributes_dict["mcmc_last_state"]
+    model.last_mcmc_state = attributes_dict["last_mcmc_state"]
 
     return model

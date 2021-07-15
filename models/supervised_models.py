@@ -50,6 +50,7 @@ def _fit_ord_reg(
     beta_prior_sd: float = 1.0,
     num_warmup: int = 250,
     num_samples: int = 750,
+    num_chains: int = 2,
 ) -> BayesianOrdinalRegression:
     x = train[0]
     if isinstance(x, csr_matrix):
@@ -57,7 +58,7 @@ def _fit_ord_reg(
     x_dim = x.shape[1]
     n_classes = len(set(train[1]))
     reg = BayesianOrdinalRegression(
-        x, train[1], x_dim, n_classes, beta_prior_sd
+        x, train[1], x_dim, n_classes, beta_prior_sd, num_chains=num_chains
     )
     reg.fit(num_warmup, num_samples)
     return reg
