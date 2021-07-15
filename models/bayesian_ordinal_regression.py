@@ -1,6 +1,6 @@
 import pickle
 from multiprocessing import cpu_count
-from typing import Iterable
+from typing import Dict, Iterable
 
 import matplotlib.pyplot as plt
 import numpyro
@@ -133,7 +133,7 @@ class BayesianOrdinalRegression:
 
         plt.clf()
 
-    def gelman_rubin_stats(self):
+    def gelman_rubin_stats(self) -> Dict[str, float]:
         def param_gr_stats(param, i):
             chains = jnp.array_split(
                 self.posterior_samples[param][:, i], self.num_chains
