@@ -113,11 +113,8 @@ def optimise_hps(
 
 def filter_features_by_previous_model_fit(
     model_path: str,
-    training_features: csr_matrix,
-    validation_features: csr_matrix,
-    testing_features_1: csr_matrix,
-    testing_features_2: csr_matrix,
-) -> Tuple[csr_matrix, csr_matrix, csr_matrix, csr_matrix]:
+    all_data: Dict[str, csr_matrix],
+) -> Dict[str, csr_matrix]:
 
     with open(model_path, "rb") as a:
         original_model = pickle.load(a)
@@ -134,17 +131,10 @@ def filter_features_by_previous_model_fit(
         np.concatenate([tree.internal_node_features for tree in trees])
     )
 
-    filtered_features = []
-    for features in [
-        training_features,
-        validation_features,
-        testing_features_1,
-        testing_features_2,
-    ]:
-        features = features.todense()
-        filtered_features.append(csr_matrix(features[:, included_features]))
-
-    return tuple(filtered_features)  # type: ignore
+    return {
+        k: [csr_matrix(v[0].todense()[:, included_features]), v[1]]
+        for k, v in all_data
+    }
 
 
 def load_and_format_data(
@@ -446,17 +436,7 @@ def main(
 
     # filter features by things which have been used by previously fitted model
     if previous_rf_model is not None:
-        filtered_features = filter_features_by_previous_model_fit(
-            previous_rf_model,
-            data["train"][0],
-            data["val"][0],
-            data["test_1"][0],
-            data["test_2"][0],
-        )
-        data["train"][0] = filtered_features[0]
-        data["val"][0] = filtered_features[1]
-        data["test_1"][0] = filtered_features[2]
-        data["test_2"][0] = filtered_features[3]
+        data = filter_features_by_previous_model_fit(previous_rf_model, data)
 
     logging.info("Optimising the model for the test data accuracy")
     if model_type == "elastic_net":
@@ -506,7 +486,9 @@ def main(
     train_predictions = model.predict(data["train"][0])
     validate_predictions = model.predict(data["val"][0])
     test_predictions_1 = model.predict(data["test_1"][0])
-    test_predictions_2 = model.predict(data["test_2"][0])
+    test_predictions_2 = (
+        model.predict(data["test_2"][0]) if "test_2" in data else None
+    )
 
     results = ResultsContainer(
         training_predictions=train_predictions,
@@ -520,13 +502,15 @@ def main(
         testing_MSE_1=mean_squared_error(
             data["test_1"][1], test_predictions_1
         ),
-        testing_MSE_2=mean_squared_error(
-            data["test_2"][1], test_predictions_2
-        ),
+        testing_MSE_2=mean_squared_error(data["test_2"][1], test_predictions_2)
+        if "test_2" in data
+        else None,
         training_accuracy=accuracy(train_predictions, data["train"][1]),
         validation_accuracy=accuracy(validate_predictions, data["val"][1]),
         testing_accuracy_1=accuracy(test_predictions_1, data["test_1"][1]),
-        testing_accuracy_2=accuracy(test_predictions_2, data["test_2"][1]),
+        testing_accuracy_2=accuracy(test_predictions_2, data["test_2"][1])
+        if "test_2" in data
+        else None,
         training_mean_acc_per_bin=mean_acc_per_bin(
             train_predictions, data["train"][1]
         ),
@@ -538,7 +522,9 @@ def main(
         ),
         testing_mean_acc_per_bin_2=mean_acc_per_bin(
             test_predictions_2, data["test_2"][1]
-        ),
+        )
+        if "test_2" in data
+        else None,
         hyperparameters=optimizer.max["params"],
         model_type=model_type,
         model=model,
@@ -552,15 +538,21 @@ def main(
             "standardise_training_MIC": standardise_training_MIC,
             "standardise_test_and_val_MIC": standardise_test_and_val_MIC,
             "previous_rf_model": previous_rf_model,
+            "extended_sequences": extended_sequences,
             "train_val_population": data["train"].population,
             "test_1_population": data["test_1"].population,
-            "test_2_population": data["test_2"].population,
+            "test_2_population": data["test_2"].population
+            if "test_2" in data
+            else None,
         },
     )
 
     print(results)
 
-    outdir = f"results/{model_type}"
+    if extended_sequences:
+        outdir = f"results/extended_sequences/{model_type}"
+    else:
+        outdir = f"results/{model_type}"
     if just_HMM_scores:
         outdir = os.path.join(outdir, "just_HMM_scores")
     elif include_HMM_scores:
