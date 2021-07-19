@@ -47,22 +47,22 @@ class BayesianOrdinalRegression:
         self.last_mcmc_state = None
 
     def _model(self, X, Y=None):
-        b_X_eta = sample(
-            "b_X_eta",
+        beta = sample(
+            "beta",
             Normal(0, self.beta_prior_sd),
             sample_shape=(self.X_dim,),
         )  # betas for each X are drawn from normal distribution
-        c_y = sample(
-            "c_y",
+        c = sample(
+            "c",
             TransformedDistribution(
                 Normal(0, 1).expand([self.n_classes - 1]),
                 transforms.OrderedTransform(),
             ),
         )  # cutpoints for ordered logisitic model
         with numpyro.plate("obs", X.shape[0]):
-            eta = X * b_X_eta
+            eta = X * beta
             eta = eta.sum(axis=1)  # summing across beta coefficients
-            return sample("Y", OrderedLogistic(eta, c_y), obs=Y)
+            return sample("Y", OrderedLogistic(eta, c), obs=Y)
 
     def fit_with_NUTS(
         self,
@@ -84,8 +84,8 @@ class BayesianOrdinalRegression:
                 target_accept_prob=target_accept_prob,
                 init_strategy=init_to_value(
                     values={
-                        "b_X_eta": self.posterior_samples["b_X_eta"][-1, :],
-                        "c_y": self.posterior_samples["c_y"][-1, :],
+                        "beta": self.posterior_samples["beta"][-1, :],
+                        "c": self.posterior_samples["c"][-1, :],
                     }
                 ),
             )
@@ -111,8 +111,8 @@ class BayesianOrdinalRegression:
                 target_accept_prob=target_accept_prob,
                 init_strategy=init_to_value(
                     values={
-                        "b_X_eta": self.posterior_samples["b_X_eta"][-1, :],
-                        "c_y": self.posterior_samples["c_y"][-1, :],
+                        "beta": self.posterior_samples["beta"][-1, :],
+                        "c": self.posterior_samples["c"][-1, :],
                     }
                 ),
             )
@@ -197,14 +197,10 @@ class BayesianOrdinalRegression:
             return gelman_rubin(jnp.stack(chains))
 
         gr_stats = {
-            f"b_X_eta_{i}": param_gr_stats("b_X_eta", i)
-            for i in range(self.X_dim)
+            f"beta_{i}": param_gr_stats("beta", i) for i in range(self.X_dim)
         }
         gr_stats.update(
-            {
-                f"c_y_{i}": param_gr_stats("c_y", i)
-                for i in range(self.n_classes)
-            }
+            {f"c_{i}": param_gr_stats("c", i) for i in range(self.n_classes)}
         )
 
         return gr_stats
