@@ -582,7 +582,9 @@ def ordinal_regression_format(
         x = np.array(data[i][0].todense())
         y_ = data[i][1].apply(math.floor)
         training_phenotype_idx = y_.isin(y)
-        y_ = y_.loc[training_phenotype_idx]  # remove phenotypes not in training set # noqa: E501
+        y_ = y_.loc[
+            training_phenotype_idx
+        ]  # remove phenotypes not in training set
         x = x[training_phenotype_idx, :]
         y_ = y_ + abs(y_.min())
 
