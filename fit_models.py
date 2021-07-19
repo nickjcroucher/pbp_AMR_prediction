@@ -133,7 +133,7 @@ def filter_features_by_previous_model_fit(
 
     return {
         k: [csr_matrix(v[0].todense()[:, included_features]), v[1]]
-        for k, v in all_data
+        for k, v in all_data.items()
     }
 
 
@@ -289,12 +289,7 @@ def load_and_format_data(
     return data_dictionary
 
 
-def save_output(results: ResultsContainer, filename: str, outdir: str):
-    if not os.path.isdir(outdir):
-        os.makedirs(outdir)
-
-    # dont overwrite existing results file
-    file_path = os.path.join(outdir, filename)
+def check_new_file_path(file_path: str) -> str:
     i = 1
     while os.path.isfile(file_path):
         split_path = file_path.split(".")
@@ -304,6 +299,16 @@ def save_output(results: ResultsContainer, filename: str, outdir: str):
         ext = split_path[-1]
         file_path = path_minus_ext + f"({i})." + ext
         i += 1
+    return file_path
+
+
+def save_output(results: ResultsContainer, filename: str, outdir: str):
+    if not os.path.isdir(outdir):
+        os.makedirs(outdir)
+
+    file_path = os.path.join(outdir, filename)
+    # dont overwrite existing results file
+    file_path = check_new_file_path(file_path)
 
     with open(file_path, "wb") as a:
         pickle.dump(results, a)
