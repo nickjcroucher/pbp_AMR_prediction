@@ -1,22 +1,22 @@
 import pickle
 from multiprocessing import cpu_count
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Optional
 
 import matplotlib.pyplot as plt
 import numpyro
+import seaborn as sns
 from jax import numpy as jnp
 from jax import random
 from jax.interpreters.xla import _DeviceArray
 from numpyro import sample
 from numpyro.diagnostics import gelman_rubin
 from numpyro.distributions import (
-    ImproperUniform,
     Normal,
     OrderedLogistic,
-    constraints,
+    TransformedDistribution,
+    transforms,
 )
-from numpyro.infer import MCMC, NUTS, Predictive
-import seaborn as sns
+from numpyro.infer import BarkerMH, init_to_value, MCMC, NUTS, Predictive
 
 # this has to be set before calling any other numpyro functions
 numpyro.set_host_device_count(cpu_count())
@@ -43,7 +43,6 @@ class BayesianOrdinalRegression:
         self.beta_prior_sd = beta_prior_sd
         self.mcmc_key = random.PRNGKey(1234)
         self.num_chains = num_chains
-        self.kernel = NUTS(self._model)
         self.posterior_samples = None
         self.last_mcmc_state = None
 
@@ -55,10 +54,9 @@ class BayesianOrdinalRegression:
         )  # betas for each X are drawn from normal distribution
         c_y = sample(
             "c_y",
-            ImproperUniform(
-                support=constraints.ordered_vector,
-                batch_shape=(),
-                event_shape=(self.n_classes - 1,),
+            TransformedDistribution(
+                Normal(0, 1).expand([self.n_classes - 1]),
+                transforms.OrderedTransform(),
             ),
         )  # cutpoints for ordered logisitic model
         with numpyro.plate("obs", X.shape[0]):
@@ -66,13 +64,68 @@ class BayesianOrdinalRegression:
             eta = eta.sum(axis=1)  # summing across beta coefficients
             return sample("Y", OrderedLogistic(eta, c_y), obs=Y)
 
-    def fit(
+    def fit_with_NUTS(
         self,
         num_warmup: int = 2500,
         num_samples: int = 7500,
+        step_size: float = 1.0,
+        target_accept_prob: float = 0.8,
+    ):
+        if self.posterior_samples is None:
+            kernel = NUTS(
+                self._model,
+                step_size=step_size,
+                target_accept_prob=target_accept_prob,
+            )
+        else:
+            kernel = NUTS(
+                self._model,
+                step_size=step_size,
+                target_accept_prob=target_accept_prob,
+                init_strategy=init_to_value(
+                    values={
+                        "b_X_eta": self.posterior_samples["b_X_eta"][-1, :],
+                        "c_y": self.posterior_samples["c_y"][-1, :],
+                    }
+                ),
+            )
+        self._fit(kernel, num_warmup, num_samples)
+
+    def fit_with_BarkerMH(
+        self,
+        num_warmup: int = 2500,
+        num_samples: int = 7500,
+        step_size: float = 1.0,
+        target_accept_prob: float = 0.4,
+    ):
+        if self.posterior_samples is None:
+            kernel = BarkerMH(
+                self._model,
+                step_size=step_size,
+                target_accept_prob=target_accept_prob,
+            )
+        else:
+            kernel = BarkerMH(
+                self._model,
+                step_size=step_size,
+                target_accept_prob=target_accept_prob,
+                init_strategy=init_to_value(
+                    values={
+                        "b_X_eta": self.posterior_samples["b_X_eta"][-1, :],
+                        "c_y": self.posterior_samples["c_y"][-1, :],
+                    }
+                ),
+            )
+        self._fit(kernel, num_warmup, num_samples)
+
+    def _fit(
+        self,
+        kernel: MCMC,
+        num_warmup: int,
+        num_samples: int,
     ):
         self.mcmc = MCMC(
-            self.kernel,
+            kernel,
             num_warmup=num_warmup,
             num_samples=num_samples,
             num_chains=self.num_chains,
@@ -83,11 +136,14 @@ class BayesianOrdinalRegression:
         self.posterior_samples = self.mcmc.get_samples()
         self.last_mcmc_state = self.mcmc.last_state
 
-    def predict(self, X: Iterable) -> _DeviceArray:
+    def predict(
+        self, X: Iterable, num_samples: Optional[int] = None
+    ) -> _DeviceArray:
         if not isinstance(X, _DeviceArray):
             X = jnp.array(X)
         return Predictive(
             self._model,
+            num_samples=num_samples,
             posterior_samples=self.posterior_samples,
             parallel=True,
         )(self.mcmc_key, X)["Y"]
