@@ -1,59 +1,33 @@
-import pickle
-from functools import partial
-from typing import Dict, List, Optional
+from typing import Iterable, Optional
 
-from bayes_opt import BayesianOptimization
-from numpy import mean
-
-from fit_models import load_and_format_data
+from fit_models import (
+    check_new_file_path,
+    load_and_format_data,
+    filter_features_by_previous_model_fit,
+)
 from models import bayesian_ordinal_regression
 from utils import ordinal_regression_format
 
 
-def train_evaluate(
-    data: Dict,
+def fit_ordinal_regression(
+    x: Iterable,
+    y: Iterable,
     beta_prior_sd: float,
-    num_warmup: int,
-    num_samples: int,
-    step_size: float,
-    target_accept_prob: float,
-) -> float:
-
+    num_chains: int,
+    *args,
+    **kwargs
+) -> bayesian_ordinal_regression.BayesianOrdinalRegression:
     model = bayesian_ordinal_regression.BayesianOrdinalRegression(
-        data["train"][0],
-        data["train"][1],
-        data["train"][0].shape[1],
-        len(set(data["train"][1])),
-        beta_prior_sd=beta_prior_sd,
-        num_chains=2,
+        x, y, x.shape[1], len(set(y)), beta_prior_sd, num_chains
     )
-    model.fit_with_NUTS(
-        num_warmup=int(num_warmup),
-        num_samples=int(num_samples),
-        step_size=step_size,
-        target_accept_prob=target_accept_prob,
-    )
-    gr_stats = model.gelman_rubin_stats()
-
-    return -mean(list(gr_stats.values()))
-
-
-def optimise_HMC_sampler(
-    data: Dict, pbounds=Dict[str, List[float]], init_points=5, n_iter=15
-):
-    partial_fitting_function = partial(train_evaluate, data=data)
-    optimizer = BayesianOptimization(
-        f=partial_fitting_function, pbounds=pbounds, random_state=0
-    )
-    optimizer.maximize(init_points=init_points, n_iter=n_iter)
-    return optimizer
+    model.fit_with_NUTS(**kwargs)
+    return model
 
 
 def main(
     train_data_population: str = "cdc",
     test_data_population_1: str = "pmen",
     test_data_population_2: Optional[str] = "maela",
-    model_type: str = "random_forest",
     blosum_inference: bool = True,
     HMM_inference: bool = False,
     HMM_MIC_inference: bool = False,
@@ -82,17 +56,22 @@ def main(
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
         extended_sequences=extended_sequences,
     )
+    if previous_rf_model is not None:
+        data = filter_features_by_previous_model_fit(previous_rf_model, data)
     data = ordinal_regression_format(data, 0.05)
-    pbounds = {
-        "beta_prior_sd": [0.1, 10.0],
-        "num_warmup": [10000, 100000],
-        "num_samples": [10000, 100000],
-        "step_size": [0.8, 1.2],
-        "target_accept_prob": [0.5, 0.7],
-    }
-    optimizer = optimise_HMC_sampler(data, pbounds=pbounds)
-    with open("hmc_sampler_optimizer.pkl", "wb") as f:
-        pickle.dump(optimizer, f)
+
+    model = fit_ordinal_regression(
+        data["train"][0],
+        data["train"][1],
+        beta_prior_sd,
+        num_chains=2,
+        step_size=2.0,
+        target_accept_prob=0.6,
+    )
+    filename = "fitted_ord_reg.pkl"
+    bayesian_ordinal_regression.save_bayesian_ordinal_regression(
+        model, check_new_file_path(filename)
+    )
 
 
 if __name__ == "__main__":
