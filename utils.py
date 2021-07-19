@@ -562,11 +562,14 @@ def ordinal_regression_format(
 ) -> Dict:
     x = np.array(data["train"][0].todense())
     y = data["train"][1].apply(math.floor)
+    y_adjusted = y + abs(y.min())  # modelling is easier if all >= 0
 
     lower_freq_threshold = round(minor_variant_frequency * len(x))
     upper_freq_threshold = len(x) - lower_freq_threshold
 
-    y_train = pd.Series(pd.Categorical(y, sorted(y.unique()), ordered=True))
+    y_train = pd.Series(
+        pd.Categorical(y_adjusted, sorted(y_adjusted.unique()), ordered=True)
+    )
     data["train"][1] = y_train
 
     idx = (lower_freq_threshold <= np.count_nonzero(x, axis=0)) & (
@@ -577,9 +580,14 @@ def ordinal_regression_format(
 
     for i in ["val", "test_1", "test_2"]:
         x = np.array(data[i][0].todense())
-        y = data[i][1].apply(math.floor)
+        y_ = data[i][1].apply(math.floor)
+        training_phenotype_idx = y_.isin(y)
+        y_ = y_.loc[training_phenotype_idx]  # remove phenotypes not in training set # noqa: E501
+        x = x[training_phenotype_idx, :]
+        y_ = y_ + abs(y_.min())
+
         y = pd.Series(
-            pd.Categorical(y, sorted(y_train.unique()), ordered=True)
+            pd.Categorical(y_, sorted(y_train.unique()), ordered=True)
         )
 
         data[i][0] = x[:, idx]
