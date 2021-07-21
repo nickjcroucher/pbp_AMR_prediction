@@ -1,4 +1,10 @@
+import logging
+import pickle
 from typing import Iterable, Optional
+
+import numpy as np
+from sklearn.linear_model import Lasso
+from scipy.sparse import csr_matrix
 
 from fit_models import (
     check_new_file_path,
@@ -14,14 +20,19 @@ def fit_ordinal_regression(
     y: Iterable,
     beta_prior_sd: float,
     num_chains: int,
-    *args,
-    **kwargs
+    **kwargs,
 ) -> bayesian_ordinal_regression.BayesianOrdinalRegression:
     model = bayesian_ordinal_regression.BayesianOrdinalRegression(
         x, y, x.shape[1], len(set(y)), beta_prior_sd, num_chains
     )
     model.fit_with_NUTS(**kwargs)
     return model
+
+
+def filter_lasso_features(features: csr_matrix, model: Lasso) -> csr_matrix:
+    features = np.array(features.todense())
+    filtered_features = features[:, np.nonzero(model.coef_)[0]]
+    return csr_matrix(filtered_features)
 
 
 def main(
@@ -40,12 +51,28 @@ def main(
     extended_sequences: bool = False,
     minor_variant_frequency: float = 0.05,
     beta_prior_sd: float = 10.0,
+    interactions: bool = False,
 ):
 
+    if interactions:
+        with open(
+            f"results/intermediates/{train_data_population}/paired_sf_p_values.pkl",  # noqa: E501
+            "rb",
+        ) as a:
+            paired_sf_p_values = pickle.load(a)
+        interactions = [i[0] for i in paired_sf_p_values if i[1] < 0.05]
+        with open(
+            "results/interaction_models/lasso_just_interactions.pkl", "rb"
+        ) as a:
+            # previously fitted lasso interaction model
+            lasso_model = pickle.load(a).model
+
+    logging.info("loading and formatting data")
     data = load_and_format_data(
         train_data_population,
         test_data_population_1,
         test_data_population_2,
+        interactions=interactions,
         blosum_inference=blosum_inference,
         HMM_inference=HMM_inference,
         HMM_MIC_inference=HMM_MIC_inference,
@@ -56,10 +83,19 @@ def main(
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
         extended_sequences=extended_sequences,
     )
-    if previous_rf_model is not None:
+    if interactions is not None:
+        logging.info("filtering data by previously fitted interaction model")
+        data = {
+            k: [filter_lasso_features(v[0], lasso_model), v[1]]
+            for k, v in data.items()
+        }
+    elif previous_rf_model is not None:
+        logging.info("filtering data by previously fitted rf model")
         data = filter_features_by_previous_model_fit(previous_rf_model, data)
-    data = ordinal_regression_format(data, 0.05)
 
+    data = ordinal_regression_format(data, minor_variant_frequency)
+
+    logging.info("fitting ordinal regression model")
     model = fit_ordinal_regression(
         data["train"][0],
         data["train"][1],
@@ -75,4 +111,5 @@ def main(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     main()
