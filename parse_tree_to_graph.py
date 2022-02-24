@@ -1,11 +1,11 @@
-from os import remove
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import networkx as nx
 import numpy as np
 import pandas as pd
 from Bio import Phylo
-from scipy.sparse import csr_matrix, vstack
+from scipy.sparse import coo_matrix, csr_matrix, identity, vstack
+from torch import FloatTensor, sparse_coo_tensor, Tensor
 
 from data_preprocessing.parse_pbp_data import (
     encode_sequences,
@@ -15,11 +15,12 @@ from data_preprocessing.parse_pbp_data import (
 from utils import _data_processing
 
 
-def tree_to_graph(tree_file: str) -> Tuple[csr_matrix, List]:
+def tree_to_graph(tree_file: str) -> Tuple[coo_matrix, List]:
     Tree = Phylo.read(tree_file, "newick")
     G = Phylo.to_networkx(Tree)
     adj = nx.adjacency_matrix(G, nodelist=G.nodes)
-    return adj, list(G.nodes)
+    adj = identity(adj.shape[0]) + adj
+    return adj.tocoo(), list(G.nodes)
 
 
 def load_features() -> Tuple[np.ndarray, np.ndarray, csr_matrix]:
@@ -103,9 +104,24 @@ def remove_empty_features(sorted_features: np.ndarray) -> np.ndarray:
     ]
 
 
-if __name__ == "__main__":
+def convert_to_tensors(features: np.ndarray, adj_matrix: coo_matrix) -> Tuple:
+    X = Tensor(features[:, 2:].astype(np.int8))
+    y = Tensor(features[:, 1].astype(float))
+    adj_tensor = sparse_coo_tensor([adj_matrix.row, adj_matrix.col], adj_matrix.data)
+    adj_tensor = adj_tensor.type(FloatTensor)
+    return X, y, adj_tensor
+
+
+def main(filter_empty_features: bool = True) -> Dict:
     tree_file = "iqtree/PBP_alignment.fasta.treefile"
     adj_matrix, nodes_list = tree_to_graph(tree_file)
     ids, mics, node_features = load_features()
     sorted_features = map_features_to_graph(nodes_list, ids, mics, node_features)
-    filtered_features = remove_empty_features(sorted_features)
+    if filter_empty_features:
+        sorted_features = remove_empty_features(sorted_features)
+    X, y, adj_tensor = convert_to_tensors(sorted_features, adj_matrix)
+    return {"X": X, "y": y, "adj": adj_tensor, "node_names": sorted_features[:, 0]}
+
+
+if __name__ == "__main__":
+    main()
