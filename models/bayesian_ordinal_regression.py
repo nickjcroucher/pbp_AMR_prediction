@@ -130,15 +130,11 @@ class BayesianOrdinalRegression:
             num_samples=num_samples,
             num_chains=self.num_chains,
         )
-        self.mcmc.run(
-            self.mcmc_key, self.X, self.Y, init_params=self.last_mcmc_state
-        )
+        self.mcmc.run(self.mcmc_key, self.X, self.Y, init_params=self.last_mcmc_state)
         self.posterior_samples = self.mcmc.get_samples()
         self.last_mcmc_state = self.mcmc.last_state
 
-    def predict(
-        self, X: Iterable, num_samples: Optional[int] = None
-    ) -> _DeviceArray:
+    def predict(self, X: Iterable, num_samples: Optional[int] = None) -> _DeviceArray:
         if not isinstance(X, _DeviceArray):
             X = jnp.array(X)
         return Predictive(
@@ -174,12 +170,8 @@ class BayesianOrdinalRegression:
             sns.kdeplot(chain, shade=True)
             plt.ylabel("")
             plt.axvline(mean, color="r", lw=2, linestyle="--", label="mean")
-            plt.axvline(
-                median, color="c", lw=2, linestyle="--", label="median"
-            )
-            plt.axvline(
-                CI_lower, linestyle=":", color="k", alpha=0.2, label="95% CI"
-            )
+            plt.axvline(median, color="c", lw=2, linestyle="--", label="median")
+            plt.axvline(CI_lower, linestyle=":", color="k", alpha=0.2, label="95% CI")
             plt.axvline(CI_upper, linestyle=":", color="k", alpha=0.2)
 
         plt.suptitle(f"Trace and Posterior Distribution for {param_name}")
@@ -196,9 +188,7 @@ class BayesianOrdinalRegression:
             )
             return gelman_rubin(jnp.stack(chains))
 
-        gr_stats = {
-            f"beta_{i}": param_gr_stats("beta", i) for i in range(self.X_dim)
-        }
+        gr_stats = {f"beta_{i}": param_gr_stats("beta", i) for i in range(self.X_dim)}
         gr_stats.update(
             {f"c_{i}": param_gr_stats("c", i) for i in range(self.n_classes)}
         )
@@ -215,9 +205,7 @@ class BayesianOrdinalRegression:
 
 
 # can't pickle mcmc.kernel so use this hack to save and reload models
-def save_bayesian_ordinal_regression(
-    model: BayesianOrdinalRegression, filename: str
-):
+def save_bayesian_ordinal_regression(model: BayesianOrdinalRegression, filename: str):
     attributes_dict = {
         "X": model.X,
         "Y": model.Y,

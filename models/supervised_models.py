@@ -60,7 +60,7 @@ def _fit_ord_reg(
     reg = BayesianOrdinalRegression(
         x, train[1], x_dim, n_classes, beta_prior_sd, num_chains=num_chains
     )
-    reg.fit(num_warmup, num_samples)
+    reg.fit_with_NUTS(num_warmup, num_samples)
     return reg
 
 

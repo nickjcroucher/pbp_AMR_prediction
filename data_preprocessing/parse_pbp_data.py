@@ -33,15 +33,15 @@ AMINO_ACIDS = [
 ]
 
 
-def get_pbp_sequence(
-    pbp_pattern: str, df: pd.DataFrame, cols: pd.Series
-) -> pd.Series:
+def get_pbp_sequence(pbp_pattern: str, df: pd.DataFrame, cols: pd.Series) -> pd.Series:
     pbp_cols = cols[cols.str.startswith(pbp_pattern)]
     return df[pbp_cols].sum(axis=1)
 
 
 def parse_pmen_and_maela(
-    pmen: pd.DataFrame, cdc: pd.DataFrame, pbp_patterns: List[str]
+    pmen: pd.DataFrame,
+    cdc: pd.DataFrame,
+    pbp_patterns: List[str],
 ) -> pd.DataFrame:
 
     pmen = filter_incomplete_sequences(pmen)
@@ -75,17 +75,11 @@ def parse_pmen_and_maela(
             last_pbp_type = cdc[pbp_type].astype(int).max()
 
             # dataframe for naming novel pbp types in pmen data
-            additional_pbps = pd.DataFrame(
-                df.loc[pd.isna(df[pbp_type])][pbp].unique()
-            )
+            additional_pbps = pd.DataFrame(df.loc[pd.isna(df[pbp_type])][pbp].unique())
             additional_pbps[1] = list(
-                range(
-                    last_pbp_type + 1, last_pbp_type + len(additional_pbps) + 1
-                )
+                range(last_pbp_type + 1, last_pbp_type + len(additional_pbps) + 1)
             )
-            additional_pbps.rename(
-                columns={0: pbp_seq, 1: pbp_type}, inplace=True
-            )
+            additional_pbps.rename(columns={0: pbp_seq, 1: pbp_type}, inplace=True)
             additional_pbps[pbp_type] = additional_pbps[pbp_type].astype(str)
 
             # add newly named pbp sequences back to dataframe and format
@@ -192,9 +186,7 @@ def parse_extended_sequences(
 
 
 def filter_incomplete_sequences(data: pd.DataFrame) -> pd.DataFrame:
-    aa_sequences = data[
-        [i for i in data.columns.tolist() if i not in ["id", "mic"]]
-    ]
+    aa_sequences = data[[i for i in data.columns.tolist() if i not in ["id", "mic"]]]
     data = data[aa_sequences.isin(AMINO_ACIDS).all(axis=1)]
     return data.reset_index(drop=True)
 
@@ -263,9 +255,7 @@ def pairwise_blast_comparisons(
     return e_values.to_dict()  # dictionary is quicker to search
 
 
-def encode_sequences(
-    data: pd.DataFrame, pbp_patterns: List[str]
-) -> sparse.csr_matrix:
+def encode_sequences(data: pd.DataFrame, pbp_patterns: List[str]) -> sparse.csr_matrix:
     """
     One hot encoding of sequences
     """
@@ -313,9 +303,7 @@ def build_co_occurrence_graph(
         for i in matches[1:]:
             weighted_adj += i
 
-    adj = weighted_adj.applymap(
-        lambda x: min(x, 1)
-    ).to_numpy()  # adjacency matrix
+    adj = weighted_adj.applymap(lambda x: min(x, 1)).to_numpy()  # adjacency matrix
     deg = np.diag(np.apply_along_axis(sum, 0, adj))  # degree matrix
     return sparse.csr_matrix(adj), sparse.csr_matrix(deg)
 
@@ -335,16 +323,10 @@ def main():
 
     cdc_encoded_sequences = encode_sequences(cdc, pbp_patterns)  # noqa: F841
     pmen_encoded_sequences = encode_sequences(pmen, pbp_patterns)  # noqa: F841
-    maela_encoded_sequences = encode_sequences(  # noqa: F841
-        maela, pbp_patterns
-    )
+    maela_encoded_sequences = encode_sequences(maela, pbp_patterns)  # noqa: F841
 
-    cdc_adj, cdc_deg = build_co_occurrence_graph(
-        cdc, pbp_patterns
-    )  # noqa: F841
-    pmen_adj, pmen_deg = build_co_occurrence_graph(
-        pmen, pbp_patterns
-    )  # noqa: F841
+    cdc_adj, cdc_deg = build_co_occurrence_graph(cdc, pbp_patterns)  # noqa: F841
+    pmen_adj, pmen_deg = build_co_occurrence_graph(pmen, pbp_patterns)  # noqa: F841
 
 
 if __name__ == "__main__":
