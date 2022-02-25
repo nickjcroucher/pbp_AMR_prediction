@@ -59,12 +59,45 @@ def load_features() -> Tuple[np.ndarray, np.ndarray, csr_matrix]:
     return ids, mics, node_features
 
 
+def select_items(
+    all_indices: np.ndarray, n_selections: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    np.random.seed(0)
+    selected_idx = np.random.choice(all_indices, n_selections, replace=False)
+    all_indices = np.setdiff1d(all_indices, selected_idx)
+    return all_indices, selected_idx
+
+
+def get_CV_indices(
+    sorted_features: np.ndarray,
+    train_split: float = 0.5,
+    val_split: float = 0.25,
+    test_split: float = 0.25,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+
+    # round to avoid floating point error
+    assert round(sum([train_split, val_split, test_split]), 1) == 1
+
+    terminal_nodes = np.vectorize(lambda x: not x.startswith("internal"))(
+        sorted_features[:, 0]
+    )
+    terminal_node_indices = np.where(terminal_nodes)[0]
+    n_terminal_nodes = len(terminal_node_indices)
+    n_train = round(n_terminal_nodes * train_split)
+    n_val = round(n_terminal_nodes * val_split)
+
+    terminal_node_indices, train_idx = select_items(terminal_node_indices, n_train)
+    test_idx, val_idx = select_items(terminal_node_indices, n_val)
+
+    return train_idx, val_idx, test_idx
+
+
 def map_features_to_graph(
     nodes_list: List,
     ids: np.ndarray,
     mics: np.ndarray,
     node_features: csr_matrix,
-):
+) -> Tuple:
     dense_features = np.array(node_features.todense())
     all_features = np.concatenate(
         (np.expand_dims(ids, 1), np.expand_dims(mics, 1), dense_features), 1
@@ -95,7 +128,11 @@ def map_features_to_graph(
     indices = np.array([node_names.index(x[0]) for x in all_features])
     all_features = np.concatenate((np.expand_dims(indices, 1), all_features), axis=1)
     sorted_features = all_features[all_features[:, 0].argsort()]
-    return sorted_features[:, 1:]
+    sorted_features = sorted_features[:, 1:]  # remove index column
+
+    CV_split_indices = get_CV_indices(sorted_features)
+
+    return sorted_features, CV_split_indices
 
 
 def remove_empty_features(sorted_features: np.ndarray) -> np.ndarray:
@@ -116,12 +153,16 @@ def main(filter_empty_features: bool = True) -> Dict:
     tree_file = "iqtree/PBP_alignment.fasta.treefile"
     adj_matrix, nodes_list = tree_to_graph(tree_file)
     ids, mics, node_features = load_features()
-    sorted_features = map_features_to_graph(nodes_list, ids, mics, node_features)
+    sorted_features, CV_indices = map_features_to_graph(
+        nodes_list, ids, mics, node_features
+    )
     if filter_empty_features:
         sorted_features = remove_empty_features(sorted_features)
     X, y, adj_tensor = convert_to_tensors(sorted_features, adj_matrix)
-    return {"X": X, "y": y, "adj": adj_tensor, "node_names": sorted_features[:, 0]}
-
-
-if __name__ == "__main__":
-    main()
+    return {
+        "X": X,
+        "y": y,
+        "adj": adj_tensor,
+        "node_names": sorted_features[:, 0],
+        "CV_indices": CV_indices,
+    }
