@@ -135,9 +135,12 @@ def map_features_to_graph(
     return sorted_features, CV_split_indices
 
 
-def remove_empty_features(sorted_features: np.ndarray) -> np.ndarray:
+def remove_non_variable_features(sorted_features: np.ndarray) -> np.ndarray:
     return sorted_features[
-        :, np.concatenate(([True] * 2, ~(np.sum(sorted_features[:, 2:], 0) == 0)))
+        :,
+        np.concatenate(
+            ([True] * 2, ~(np.std(sorted_features[:, 2:].astype(int), 0) == 0))
+        ),
     ]
 
 
@@ -149,15 +152,15 @@ def convert_to_tensors(features: np.ndarray, adj_matrix: coo_matrix) -> Tuple:
     return X, y, adj_tensor
 
 
-def main(filter_empty_features: bool = True) -> Dict:
+def main(filter_constant_features: bool = True) -> Dict:
     tree_file = "iqtree/PBP_alignment.fasta.treefile"
     adj_matrix, nodes_list = tree_to_graph(tree_file)
     ids, mics, node_features = load_features()
     sorted_features, CV_indices = map_features_to_graph(
         nodes_list, ids, mics, node_features
     )
-    if filter_empty_features:
-        sorted_features = remove_empty_features(sorted_features)
+    if filter_constant_features:
+        sorted_features = remove_non_variable_features(sorted_features)
     X, y, adj_tensor = convert_to_tensors(sorted_features, adj_matrix)
     return {
         "X": X,
