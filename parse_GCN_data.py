@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from Bio import Phylo
 from scipy.sparse import coo_matrix, csr_matrix, identity, vstack
-from torch import FloatTensor, sparse_coo_tensor, Tensor
+from torch import FloatTensor, sparse_coo_tensor, Tensor, unsqueeze
 
 from data_preprocessing.parse_pbp_data import (
     encode_sequences,
@@ -147,12 +147,13 @@ def remove_non_variable_features(sorted_features: np.ndarray) -> np.ndarray:
 def convert_to_tensors(features: np.ndarray, adj_matrix: coo_matrix) -> Tuple:
     X = Tensor(features[:, 2:].astype(np.int8))
     y = Tensor(features[:, 1].astype(float))
+    y = unsqueeze(y, 1)
     adj_tensor = sparse_coo_tensor([adj_matrix.row, adj_matrix.col], adj_matrix.data)
     adj_tensor = adj_tensor.type(FloatTensor)
     return X, y, adj_tensor
 
 
-def main(filter_constant_features: bool = True) -> Dict:
+def load_data(filter_constant_features: bool = True) -> Dict:
     tree_file = "iqtree/PBP_alignment.fasta.treefile"
     adj_matrix, nodes_list = tree_to_graph(tree_file)
     ids, mics, node_features = load_features()
