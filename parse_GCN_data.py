@@ -1,11 +1,12 @@
 from typing import Dict, List, Tuple
+import warnings
 
 import networkx as nx
 import numpy as np
 import pandas as pd
+import torch
 from Bio import Phylo
 from scipy.sparse import coo_matrix, csr_matrix, identity, vstack
-from torch import FloatTensor, sparse_coo_tensor, Tensor, unsqueeze
 
 from data_preprocessing.parse_pbp_data import (
     encode_sequences,
@@ -97,7 +98,7 @@ def map_features_to_graph(
     ids: np.ndarray,
     mics: np.ndarray,
     node_features: csr_matrix,
-) -> Tuple:
+) -> np.ndarray:
     dense_features = np.array(node_features.todense())
     all_features = np.concatenate(
         (np.expand_dims(ids, 1), np.expand_dims(mics, 1), dense_features), 1
@@ -128,11 +129,42 @@ def map_features_to_graph(
     indices = np.array([node_names.index(x[0]) for x in all_features])
     all_features = np.concatenate((np.expand_dims(indices, 1), all_features), axis=1)
     sorted_features = all_features[all_features[:, 0].argsort()]
-    sorted_features = sorted_features[:, 1:]  # remove index column
+    return sorted_features[:, 1:]  # remove index column
 
-    CV_split_indices = get_CV_indices(sorted_features)
 
-    return sorted_features, CV_split_indices
+def approximate_internal_features(
+    features: np.ndarray, adj: torch.Tensor
+) -> np.ndarray:
+    def get_unlabelled_node_indices(aa_features: np.ndarray) -> np.ndarray:
+        return np.where(np.apply_along_axis(lambda x: (x == 0).all(), 1, aa_features))[
+            0
+        ]
+
+    indices = np.array(adj.indices())
+    amino_acid_features = features[:, 2:].astype(float)
+    unlabelled_node_indices = get_unlabelled_node_indices(amino_acid_features)
+
+    def mean_features(node_index: int) -> np.ndarray:
+        neighbours = indices[1][indices[0] == node_index]
+        try:
+            # neighbours will include index node because of self loop in adj matrix
+            return np.sum(amino_acid_features[neighbours], 0) / (
+                neighbours.shape[0] - 1
+            )
+        except RuntimeWarning:
+            return amino_acid_features[node_index]
+
+    while unlabelled_node_indices.shape[0] > 0:
+        with warnings.catch_warnings(record=True):
+            approx_internal_features = np.array(
+                [mean_features(i) for i in unlabelled_node_indices]
+            )
+        # TODO: figure out why this doesn't work
+        amino_acid_features[unlabelled_node_indices] = approx_internal_features
+
+        unlabelled_node_indices = get_unlabelled_node_indices(amino_acid_features)
+
+    return np.concatenate((features[:, :2], amino_acid_features), 1)
 
 
 def remove_non_variable_features(sorted_features: np.ndarray) -> np.ndarray:
@@ -144,25 +176,27 @@ def remove_non_variable_features(sorted_features: np.ndarray) -> np.ndarray:
     ]
 
 
-def convert_to_tensors(features: np.ndarray, adj_matrix: coo_matrix) -> Tuple:
-    X = Tensor(features[:, 2:].astype(np.int8))
-    y = Tensor(features[:, 1].astype(float))
-    y = unsqueeze(y, 1)
-    adj_tensor = sparse_coo_tensor([adj_matrix.row, adj_matrix.col], adj_matrix.data)
-    adj_tensor = adj_tensor.type(FloatTensor)
-    return X, y, adj_tensor
+def convert_to_tensors(features: np.ndarray) -> Tuple:
+    X = torch.Tensor(features[:, 2:].astype(float))
+    y = torch.Tensor(features[:, 1].astype(float))
+    y = torch.unsqueeze(y, 1)
+    return X, y
 
 
 def load_data(filter_constant_features: bool = True) -> Dict:
     tree_file = "iqtree/PBP_alignment.fasta.treefile"
     adj_matrix, nodes_list = tree_to_graph(tree_file)
     ids, mics, node_features = load_features()
-    sorted_features, CV_indices = map_features_to_graph(
-        nodes_list, ids, mics, node_features
+    sorted_features = map_features_to_graph(nodes_list, ids, mics, node_features)
+    CV_indices = get_CV_indices(sorted_features)
+    adj_tensor = torch.sparse_coo_tensor(
+        [adj_matrix.row, adj_matrix.col], adj_matrix.data
     )
+    adj_tensor = adj_tensor.type(torch.FloatTensor).coalesce()
     if filter_constant_features:
         sorted_features = remove_non_variable_features(sorted_features)
-    X, y, adj_tensor = convert_to_tensors(sorted_features, adj_matrix)
+    sorted_features = approximate_internal_features(sorted_features, adj_tensor)
+    X, y = convert_to_tensors(sorted_features)
     return {
         "X": X,
         "y": y,
