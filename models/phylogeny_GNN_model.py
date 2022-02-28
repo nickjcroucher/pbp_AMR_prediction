@@ -9,9 +9,7 @@ class GCN_layer(Module):
         super(GCN_layer, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.lin = torch.nn.Linear(
-            in_features, out_features
-        )  # encodes weights and bias
+        self.lin = torch.nn.Linear(in_features, out_features)
 
     def forward(self, layer_input, adj):
         x = self.lin(layer_input)  # Y = WX^T + B
@@ -22,16 +20,28 @@ class GCN_layer(Module):
         return f"{self.__class__.__name__} ({self.in_features}->{self.out_features})"
 
 
+class Perceptron(Module):
+    def __init__(self, in_features, out_features):
+        super(Perceptron, self).__init__()
+        self.lin = torch.nn.Linear(in_features, out_features)
+
+    def forward(self, layer_input):
+        return self.lin(layer_input)
+
+
 class GCN(nn.Module):
-    def __init__(self, nfeat, nhid, nclass, dropout):
+    def __init__(self, nfeat, nhid_1, nhid_2, nhid_3, nclass, dropout):
         super(GCN, self).__init__()
 
-        self.gc1 = GCN_layer(nfeat, nhid)
-        self.gc2 = GCN_layer(nhid, nclass)
+        self.gc1 = GCN_layer(nfeat, nhid_1)
+        self.gc2 = GCN_layer(nhid_1, nhid_2)
+        self.perc_1 = Perceptron(nhid_2, nhid_3)
+        self.perc_2 = Perceptron(nhid_3, nclass)
         self.dropout = dropout
 
     def forward(self, x, adj):
-        x = F.relu(self.gc1(x, adj))
         x = F.dropout(x, self.dropout, training=self.training)
-        x = self.gc2(x, adj)
-        return x
+        x = F.relu(self.gc1(x, adj))
+        x = F.relu(self.gc2(x, adj))
+        x = F.relu(self.perc_1(x))
+        return self.perc_2(x)
