@@ -1,7 +1,9 @@
 import time
 from typing import Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn.functional as F
 
@@ -11,19 +13,23 @@ from utils import accuracy, mean_acc_per_bin
 
 
 EPOCHS = 100
+LAPLACIAN = True
 
 data = load_data(
-    filter_constant_features=True, train_population="cdc", test_population_1="pmen"
+    filter_constant_features=True,
+    train_population="cdc",
+    test_population_1="pmen",
+    graph_laplacian=LAPLACIAN,
 )
 X = data["X"]
 y = data["y"]
 y_np = np.squeeze(y.numpy())
-adj = data["adj"]
+adj = data["laplacian"] if LAPLACIAN else data["adj"]
 idx_train, idx_val = data["CV_indices"][:2]
 idx_test = np.concatenate(data["CV_indices"][2:])
 
-model = GCN(X.shape[1], X.shape[1], 500, 100, 1, 0.3)
-optimizer = torch.optim.Adam(model.parameters())
+model = GCN(X.shape[1], X.shape[1], 500, 500, 500, 100, 1, 0.3)
+optimizer = torch.optim.Adam(model.parameters(), weight_decay=0.2)
 
 metrics_dict = {
     "train_loss": [],
@@ -71,13 +77,13 @@ def train(epoch: int):
     loss_val, acc_val, mean_acc_val = compute_metrics(output, output_np, "val")
     print(
         f"Epoch: {epoch + 1}",
-        f"loss_train: {loss_train.item()}",
-        f"acc_train: {acc_train}",
-        f"mean_acc_train: {mean_acc_train}",
-        f"loss_val: {loss_val.item()}",
-        f"acc_val: {acc_val}",
-        f"mean_acc_val: {mean_acc_val}",
-        f"time: {time.time() - t}s\n",
+        f"loss_train: {round(loss_train.item(), 2)}",
+        f"acc_train: {round(acc_train, 2)}",
+        f"mean_acc_train: {round(mean_acc_train, 2)}",
+        f"loss_val: {round(loss_val.item(), 2)}",
+        f"acc_val: {round(acc_val, 2)}",
+        f"mean_acc_val: {round(mean_acc_val, 2)}",
+        f"time: {round(time.time() - t, 2)}s\n",
     )
 
 
@@ -88,10 +94,17 @@ def test():
     loss_test, acc_test, mean_acc_test = compute_metrics(output, output_np, "test")
     print(
         "Test set results:",
-        f"loss_test = {loss_test.item()}",
-        f"acc_test = {acc_test}",
-        f"mean_acc_test = {mean_acc_test}\n",
+        f"loss_test = {round(loss_test.item(), 2)}",
+        f"acc_test = {round(acc_test, 2)}",
+        f"mean_acc_test = {round(mean_acc_test, 2)}\n\n",
     )
+
+
+def plot_metrics(metrics_df: pd.DataFrame, metric: str):
+    metrics_df[f"train_{metric}"].plot()
+    metrics_df[f"val_{metric}"].plot()
+    metrics_df[f"test_{metric}"].plot()
+    plt.savefig(f"{metric}.png")
 
 
 if __name__ == "__main__":
@@ -101,3 +114,5 @@ if __name__ == "__main__":
         test()
     print("Optimization Finished!")
     print(f"Total time elapsed: {time.time() - t_total}s")
+
+    metrics_df = pd.DataFrame(metrics_dict)

@@ -30,18 +30,22 @@ class Perceptron(Module):
 
 
 class GCN(nn.Module):
-    def __init__(self, nfeat, nhid_1, nhid_2, nhid_3, nclass, dropout):
+    def __init__(self, nfeat, nhid_1, nhid_2, nhid_3, nhid_4, nhid_5, nclass, dropout):
         super(GCN, self).__init__()
 
         self.gc1 = GCN_layer(nfeat, nhid_1)
         self.gc2 = GCN_layer(nhid_1, nhid_2)
-        self.perc_1 = Perceptron(nhid_2, nhid_3)
-        self.perc_2 = Perceptron(nhid_3, nclass)
+        self.gc3 = GCN_layer(nhid_2, nhid_3)
+        self.perc_1 = Perceptron(nhid_3, nhid_4)
+        self.perc_2 = Perceptron(nhid_4, nhid_5)
+        self.perc_3 = Perceptron(nhid_5, nclass)
         self.dropout = dropout
 
     def forward(self, x, adj):
         x = F.dropout(x, self.dropout, training=self.training)
         x = F.relu(self.gc1(x, adj))
         x = F.relu(self.gc2(x, adj))
+        x = F.relu(self.gc3(x, adj))
         x = F.relu(self.perc_1(x))
-        return self.perc_2(x)
+        x = F.relu(self.perc_2(x))
+        return self.perc_3(x)
