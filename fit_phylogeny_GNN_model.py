@@ -1,4 +1,5 @@
 import time
+from multiprocessing import cpu_count
 from typing import Tuple
 
 import matplotlib.pyplot as plt
@@ -12,6 +13,7 @@ from models.phylogeny_GNN_model import GCN
 from parse_GCN_data import load_data
 from utils import accuracy, mean_acc_per_bin
 
+torch.set_num_threads(cpu_count() - 2)
 
 EPOCHS = 100
 LAPLACIAN = True
