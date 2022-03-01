@@ -23,10 +23,15 @@ class GCN_layer(Module):
 class Perceptron(Module):
     def __init__(self, in_features, out_features):
         super(Perceptron, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
         self.lin = torch.nn.Linear(in_features, out_features)
 
     def forward(self, layer_input):
         return self.lin(layer_input)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__} ({self.in_features}->{self.out_features})"
 
 
 class GCN(nn.Module):
