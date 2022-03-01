@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, Tuple
 import warnings
 
+import math
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -21,7 +22,10 @@ def tree_to_graph(tree_file: str) -> Tuple[coo_matrix, List]:
     G = Phylo.to_networkx(Tree)
     adj = nx.adjacency_matrix(G, nodelist=G.nodes)
     adj = identity(adj.shape[0]) + adj
-    return adj.tocoo(), list(G.nodes)
+    adj = adj.tocoo()
+    adj_tensor = torch.sparse_coo_tensor([adj.row, adj.col], adj.data)
+    adj_tensor = adj_tensor.type(torch.FloatTensor).coalesce()
+    return adj_tensor, list(G.nodes)
 
 
 def load_features() -> Tuple[np.ndarray, np.ndarray, csr_matrix]:
@@ -224,13 +228,26 @@ def convert_to_tensors(features: np.ndarray) -> Tuple:
     return X, y
 
 
+def compute_graph_laplacian(adj_tensor: torch.Tensor):
+    row_indices = adj_tensor.indices()[0].numpy()
+    _, counts = np.unique(row_indices, return_counts=True)
+    normed_counts = np.array(
+        [1 / math.sqrt(i) for i in counts]
+    )  # equivalent to raising degree matrix to power -1/2
+    D = torch.diag(torch.Tensor(normed_counts))
+    D = D.type(adj_tensor.dtype)
+    laplacian = torch.mm(D, torch.sparse.mm(adj_tensor, D))
+    return laplacian.to_sparse().coalesce()
+
+
 def load_data(
     filter_constant_features: bool = True,
     train_population: Optional[str] = None,
     test_population_1: Optional[str] = None,
+    graph_laplacian: bool = True,
 ) -> Dict:
     tree_file = "iqtree/PBP_alignment.fasta.treefile"
-    adj_matrix, nodes_list = tree_to_graph(tree_file)
+    adj_tensor, nodes_list = tree_to_graph(tree_file)
     ids, mics, node_features = load_features()
     sorted_features = map_features_to_graph(nodes_list, ids, mics, node_features)
     CV_indices = get_CV_indices(
@@ -238,10 +255,6 @@ def load_data(
         train_population=train_population,
         test_population_1=test_population_1,
     )
-    adj_tensor = torch.sparse_coo_tensor(
-        [adj_matrix.row, adj_matrix.col], adj_matrix.data
-    )
-    adj_tensor = adj_tensor.type(torch.FloatTensor).coalesce()
     if filter_constant_features:
         sorted_features = remove_non_variable_features(sorted_features)
     sorted_features = approximate_internal_features(sorted_features, adj_tensor)
@@ -250,6 +263,7 @@ def load_data(
         "X": X,
         "y": y,
         "adj": adj_tensor,
+        "laplacian": compute_graph_laplacian(adj_tensor) if graph_laplacian else None,
         "node_names": sorted_features[:, 0],
         "CV_indices": CV_indices,
     }
