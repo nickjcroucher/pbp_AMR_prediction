@@ -10,16 +10,19 @@ from parse_GCN_data import load_data
 from utils import accuracy, mean_acc_per_bin
 
 
-EPOCHS = 150
+EPOCHS = 100
 
-data = load_data(filter_constant_features=True)
+data = load_data(
+    filter_constant_features=True, train_population="cdc", test_population_1="pmen"
+)
 X = data["X"]
 y = data["y"]
 y_np = np.squeeze(y.numpy())
 adj = data["adj"]
-idx_train, idx_val, idx_test = data["CV_indices"]
+idx_train, idx_val = data["CV_indices"][:2]
+idx_test = np.concatenate(data["CV_indices"][2:])
 
-model = GCN(X.shape[1], X.shape[1], 250, 1, 0.3)
+model = GCN(X.shape[1], X.shape[1], 500, 100, 1, 0.3)
 optimizer = torch.optim.Adam(model.parameters())
 
 metrics_dict = {

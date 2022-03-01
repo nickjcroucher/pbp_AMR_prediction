@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 import warnings
 
 import networkx as nx
@@ -69,14 +69,14 @@ def select_items(
     return all_indices, selected_idx
 
 
-def get_CV_indices(
+def random_CV_split(
     sorted_features: np.ndarray,
-    train_split: float = 0.5,
-    val_split: float = 0.25,
-    test_split: float = 0.25,
+    train_split: float,
+    val_split: float,
+    test_split: float,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-
     # round to avoid floating point error
+
     assert round(sum([train_split, val_split, test_split]), 1) == 1
 
     terminal_nodes = np.vectorize(lambda x: not x.startswith("internal"))(
@@ -91,6 +91,47 @@ def get_CV_indices(
     test_idx, val_idx = select_items(terminal_node_indices, n_val)
 
     return train_idx, val_idx, test_idx
+
+
+def population_CV_split(
+    sorted_features: np.ndarray,
+    train_population: str,
+    test_population_1: str,
+    val_split,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    test_population_2 = list(
+        set(["cdc", "pmen", "maela"]) - set([train_population, test_population_1])
+    )[0]
+    test_1_idx = np.where(
+        np.vectorize(lambda x: x.startswith(test_population_1))(sorted_features[:, 0])
+    )[0]
+    test_2_idx = np.where(
+        np.vectorize(lambda x: x.startswith(test_population_2))(sorted_features[:, 0])
+    )[0]
+    train_idx = np.where(
+        np.vectorize(lambda x: x.startswith(train_population))(sorted_features[:, 0])
+    )[0]
+
+    n_val = round(len(train_idx) * val_split)
+    train_idx, val_idx = select_items(train_idx, n_val)
+
+    return train_idx, val_idx, test_1_idx, test_2_idx
+
+
+def get_CV_indices(
+    sorted_features: np.ndarray,
+    train_split: float = 0.5,
+    val_split: float = 0.25,
+    test_split: float = 0.25,
+    train_population: Optional[str] = None,
+    test_population_1: Optional[str] = None,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    if train_population is not None and test_population_1 is not None:
+        return population_CV_split(
+            sorted_features, train_population, test_population_1, val_split
+        )
+    else:
+        return random_CV_split(sorted_features, train_split, val_split, test_split)
 
 
 def map_features_to_graph(
@@ -183,12 +224,20 @@ def convert_to_tensors(features: np.ndarray) -> Tuple:
     return X, y
 
 
-def load_data(filter_constant_features: bool = True) -> Dict:
+def load_data(
+    filter_constant_features: bool = True,
+    train_population: Optional[str] = None,
+    test_population_1: Optional[str] = None,
+) -> Dict:
     tree_file = "iqtree/PBP_alignment.fasta.treefile"
     adj_matrix, nodes_list = tree_to_graph(tree_file)
     ids, mics, node_features = load_features()
     sorted_features = map_features_to_graph(nodes_list, ids, mics, node_features)
-    CV_indices = get_CV_indices(sorted_features)
+    CV_indices = get_CV_indices(
+        sorted_features,
+        train_population=train_population,
+        test_population_1=test_population_1,
+    )
     adj_tensor = torch.sparse_coo_tensor(
         [adj_matrix.row, adj_matrix.col], adj_matrix.data
     )
