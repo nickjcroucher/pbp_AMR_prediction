@@ -17,18 +17,25 @@ torch.set_num_threads(cpu_count() - 2)
 
 EPOCHS = 100
 LAPLACIAN = True
+TRAIN_POPULATION = None
+TEST_POPULATION_1 = None
 
 data = load_data(
     filter_constant_features=True,
-    train_population="cdc",
-    test_population_1="pmen",
+    train_population=TRAIN_POPULATION,
+    test_population_1=TEST_POPULATION_1,
     graph_laplacian=LAPLACIAN,
 )
 X = data["X"]
 y = data["y"]
 y_np = np.squeeze(y.numpy())
 adj = data["laplacian"] if LAPLACIAN else data["adj"]
-idx_train, idx_val, idx_test_1, idx_test_2 = data["CV_indices"]
+idx_train, idx_val = data["CV_indices"][:2]
+if TEST_POPULATION_1 is not None:
+    idx_test_1, idx_test_2 = data["CV_indices"][2:]
+else:
+    idx_test_1 = data["CV_indices"][-1]
+    idx_test_2 = data["CV_indices"][-1]
 
 metrics_dict = {
     "train_loss": [],
