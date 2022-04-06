@@ -1,3 +1,4 @@
+from multiprocessing import cpu_count
 from typing import Tuple, Union
 
 import numpy as np
@@ -14,7 +15,7 @@ def _fit_rf(
     train: Tuple[Union[csr_matrix, NDArray], NDArray], **kwargs
 ) -> RandomForestRegressor:
     kwargs = {k: round(v) for k, v in kwargs.items()}
-    reg = RandomForestRegressor(**kwargs, n_jobs=-1)
+    reg = RandomForestRegressor(**kwargs, n_jobs=cpu_count() - 2)
     reg.fit(train[0], train[1])
     return reg
 
