@@ -9,13 +9,10 @@ import seaborn as sns
 from utils import ResultsContainer
 
 
-MODELS = ["random_forest", "DBSCAN", "DBSCAN_with_UMAP"]
 POPULATIONS = ["cdc", "pmen", "maela"]
 
 
-def plot_metrics(
-    all_metrics: Dict[str, pd.DataFrame], train_pop: str, output_dir: str
-):
+def plot_metrics(all_metrics: Dict[str, pd.DataFrame], train_pop: str, output_dir: str):
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
     for metric, metric_data in all_metrics.items():
@@ -88,10 +85,13 @@ def process_data(data: List[ResultsContainer]) -> Dict[str, pd.DataFrame]:
 
 
 def load_data(
-    train_pop: str, inference_method: str, just_hmm_scores: bool = False
+    train_pop: str,
+    inference_method: str,
+    just_hmm_scores: bool = False,
+    models=["random_forest", "DBSCAN", "DBSCAN_with_UMAP"],
 ) -> List[ResultsContainer]:
     all_data = []
-    for model in MODELS:
+    for model in models:
         if just_hmm_scores:
             file_path_1 = f"results/{model}/just_HMM_scores/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types.pkl"  # noqa: E501
             file_path_2 = f"results/{model}/just_HMM_scores/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types(1).pkl"  # noqa: E501
