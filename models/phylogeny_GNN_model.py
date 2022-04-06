@@ -85,9 +85,11 @@ class BayesianGCN(Module):
         nhid_5,
         nclass,
         dropout,
+        adj,
     ):
         super(BayesianGCN, self).__init__()
 
+        self.adj = adj
         self.gc1 = GCN_layer(nfeat, nhid_1, bayesian=True)
         self.gc2 = GCN_layer(nhid_1, nhid_2, bayesian=True)
         self.gc3 = GCN_layer(nhid_2, nhid_3, bayesian=True)
@@ -96,11 +98,11 @@ class BayesianGCN(Module):
         self.perc_3 = Perceptron(nhid_5, nclass, bayesian=True)
         self.dropout = dropout
 
-    def forward(self, x, adj):
+    def forward(self, x):
         x = F.dropout(x, self.dropout, training=self.training)
-        x = F.relu(self.gc1(x, adj))
-        x = F.relu(self.gc2(x, adj))
-        x = F.relu(self.gc3(x, adj))
+        x = F.relu(self.gc1(x, self.adj))
+        x = F.relu(self.gc2(x, self.adj))
+        x = F.relu(self.gc3(x, self.adj))
         x = F.relu(self.perc_1(x))
         x = F.relu(self.perc_2(x))
         return self.perc_3(x)
