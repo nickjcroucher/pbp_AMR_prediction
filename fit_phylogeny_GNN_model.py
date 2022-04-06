@@ -1,3 +1,5 @@
+import pickle
+import sys
 import time
 from multiprocessing import cpu_count
 from typing import Tuple
@@ -17,8 +19,8 @@ torch.set_num_threads(cpu_count() - 2)
 
 EPOCHS = 100
 LAPLACIAN = True
-TRAIN_POPULATION = None
-TEST_POPULATION_1 = None
+TRAIN_POPULATION = sys.argv[1]
+TEST_POPULATION_1 = sys.argv[2]
 
 data = load_data(
     filter_constant_features=True,
@@ -185,5 +187,19 @@ def main() -> Tuple[GCN, pd.DataFrame]:
     return model, metrics_df
 
 
+def save_results(metrics_df: pd.DataFrame):
+    data = {
+        "metrics_df": metrics_df,
+        "train_population": TRAIN_POPULATION,
+        "test_population_1": TEST_POPULATION_1,
+    }
+    dest = (
+        f"./results/phylogeny_GNN_model/GNN_{TRAIN_POPULATION}_{TEST_POPULATION_1}.pkl"
+    )
+    with open(dest, "wb") as a:
+        pickle.dump(data, a)
+
+
 if __name__ == "__main__":
     model, metrics_df = main()
+    save_results(metrics_df)
