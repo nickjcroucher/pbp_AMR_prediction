@@ -158,9 +158,7 @@ def load_and_format_data(
     if extended_sequences and sorted(
         [train_data_population, test_data_population_1]
     ) != ["maela", "pmen"]:
-        raise ValueError(
-            "Extended sequence data is only available for pmen and maela"
-        )
+        raise ValueError("Extended sequence data is only available for pmen and maela")
 
     if extended_sequences:
         train, test_1, val = load_extended_sequence_data(
@@ -193,17 +191,14 @@ def load_and_format_data(
         }
 
     datasets = {
-        k: encode_sequences(v, pbp_patterns)
-        for k, v in original_datasets.items()
+        k: encode_sequences(v, pbp_patterns) for k, v in original_datasets.items()
     }
 
     if include_HMM_scores or just_HMM_scores:
         datasets = {k: v.todense() for k, v in datasets.items()}
 
         if just_HMM_scores:
-            datasets = {
-                k: np.zeros((v.shape[0], 1)) for k, v in datasets.items()
-            }
+            datasets = {k: np.zeros((v.shape[0], 1)) for k, v in datasets.items()}
 
         for pbp in pbp_patterns:
             if extended_sequences:
@@ -249,9 +244,7 @@ def load_and_format_data(
 
         datasets = {k: csr_matrix(v) for k, v in datasets.items()}
 
-    datasets = {
-        k: (v, original_datasets[k]["log2_mic"]) for k, v in datasets.items()
-    }
+    datasets = {k: (v, original_datasets[k]["log2_mic"]) for k, v in datasets.items()}
 
     def interact(data, interacting_features):
         interacting_features = np.concatenate(
@@ -491,9 +484,7 @@ def main(
     train_predictions = model.predict(data["train"][0])
     validate_predictions = model.predict(data["val"][0])
     test_predictions_1 = model.predict(data["test_1"][0])
-    test_predictions_2 = (
-        model.predict(data["test_2"][0]) if "test_2" in data else None
-    )
+    test_predictions_2 = model.predict(data["test_2"][0]) if "test_2" in data else None
 
     results = ResultsContainer(
         training_predictions=train_predictions,
@@ -501,12 +492,8 @@ def main(
         testing_predictions_1=test_predictions_1,
         testing_predictions_2=test_predictions_2,
         training_MSE=mean_squared_error(data["train"][1], train_predictions),
-        validation_MSE=mean_squared_error(
-            data["val"][1], validate_predictions
-        ),
-        testing_MSE_1=mean_squared_error(
-            data["test_1"][1], test_predictions_1
-        ),
+        validation_MSE=mean_squared_error(data["val"][1], validate_predictions),
+        testing_MSE_1=mean_squared_error(data["test_1"][1], test_predictions_1),
         testing_MSE_2=mean_squared_error(data["test_2"][1], test_predictions_2)
         if "test_2" in data
         else None,
@@ -516,9 +503,7 @@ def main(
         testing_accuracy_2=accuracy(test_predictions_2, data["test_2"][1])
         if "test_2" in data
         else None,
-        training_mean_acc_per_bin=mean_acc_per_bin(
-            train_predictions, data["train"][1]
-        ),
+        training_mean_acc_per_bin=mean_acc_per_bin(train_predictions, data["train"][1]),
         validation_mean_acc_per_bin=mean_acc_per_bin(
             validate_predictions, data["val"][1]
         ),
@@ -570,6 +555,8 @@ def main(
         filename = f"train_pop_{train_data_population}_results_HMM_inferred_pbp_types.pkl"  # noqa: E501
     elif HMM_MIC_inference:
         filename = f"train_pop_{train_data_population}_results_HMM_MIC_inferred_pbp_types.pkl"  # noqa: E501
+    else:
+        filename = f"train_pop_{train_data_population}_results_no_inference_pbp_types.pkl"  # noqa: E501
     save_output(results, filename, outdir)
 
 
