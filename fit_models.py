@@ -4,12 +4,14 @@ import argparse
 import logging
 import os
 import pickle
+import random
 import warnings
 from functools import partial
 from math import log10
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
+import pandas as pd
 from bayes_opt import BayesianOptimization
 from nptyping import NDArray
 from scipy.sparse import csr_matrix
@@ -282,6 +284,30 @@ def load_and_format_data(
     return data_dictionary
 
 
+def randomise_training_data(data: Dict) -> Dict:
+    # TODO make this the same as mixed populations in GNN code
+
+    X = np.concatenate([i[0].todense() for i in data.values()])
+    y = pd.concat([i[1] for i in data.values()], ignore_index=True)
+    X_and_y = np.concatenate((np.expand_dims(y, 1), X), axis=1)
+
+    train_n = int(0.5 * y.shape[0])
+
+    random.seed(0)
+    random.shuffle(X_and_y)
+
+    def extract_samples(n):
+        global X_and_y
+        out = X_and_y[:n]
+        X_and_y = X_and_y[n:]
+        return out
+
+    train_data = extract_samples(train_n)
+    val_data = extract_samples(int(X_and_y.shape[0] / 2))
+    test_data_1 = X_and_y
+    test_data_2 = test_data_2
+
+
 def check_new_file_path(file_path: str) -> str:
     i = 1
     while os.path.isfile(file_path):
@@ -403,6 +429,7 @@ def main(
     train_data_population: str = "cdc",
     test_data_population_1: str = "pmen",
     test_data_population_2: Optional[str] = "maela",
+    randomise_populations: bool = False,
     model_type: str = "random_forest",
     blosum_inference: bool = False,
     HMM_inference: bool = False,
@@ -431,6 +458,9 @@ def main(
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
         extended_sequences=extended_sequences,
     )
+
+    if randomise_populations:
+        ...
 
     # filter features by things which have been used by previously fitted model
     if previous_rf_model is not None:
