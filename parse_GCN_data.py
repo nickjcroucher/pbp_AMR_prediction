@@ -64,6 +64,14 @@ def load_features() -> Tuple[np.ndarray, np.ndarray, csr_matrix]:
     return ids, mics, node_features
 
 
+def load_hamming_dist_network(
+    parquet_path: str, ids: np.ndarray, cutoff: float = 0.018
+):
+    dists = pd.read_parquet(parquet_path)
+    dists = dists.reindex(index=ids, columns=ids)  # ensure correct order
+    return torch.Tensor(dists.values < cutoff).to_sparse()
+
+
 def select_items(
     all_indices: np.ndarray, n_selections: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -230,7 +238,7 @@ def convert_to_tensors(features: np.ndarray) -> Tuple:
 
 def compute_graph_laplacian(adj_tensor: torch.Tensor):
     row_indices = adj_tensor.indices()[0].numpy()
-    _, counts = np.unique(row_indices, return_counts=True)
+    counts = np.unique(row_indices, return_counts=True)[1]
     normed_counts = np.array(
         [1 / math.sqrt(i) for i in counts]
     )  # equivalent to raising degree matrix to power -1/2
@@ -245,11 +253,26 @@ def load_data(
     train_population: Optional[str] = None,
     test_population_1: Optional[str] = None,
     graph_laplacian: bool = True,
+    tree: bool = False,
+    hamming_dist_network: bool = True,
 ) -> Dict:
-    tree_file = "iqtree/PBP_alignment.fasta.treefile"
-    adj_tensor, nodes_list = tree_to_graph(tree_file)
+    if sum([tree, hamming_dist_network]) != 1:
+        raise ValueError("One of tree and hamming_dist_network must be True")
+
     ids, mics, node_features = load_features()
-    sorted_features = map_features_to_graph(nodes_list, ids, mics, node_features)
+
+    if tree:
+        tree_file = "iqtree/PBP_alignment.fasta.treefile"
+        adj_tensor, nodes_list = tree_to_graph(tree_file)
+        sorted_features = map_features_to_graph(nodes_list, ids, mics, node_features)
+    elif hamming_dist_network:
+        parquet_path = "hamming_distance_network/hamming_dists.parquet"
+        adj_tensor = load_hamming_dist_network(parquet_path, ids)
+        sorted_features = np.concatenate(
+            (np.expand_dims(ids, 1), np.expand_dims(mics, 1), node_features.todense()),
+            axis=1,
+        )
+
     CV_indices = get_CV_indices(
         sorted_features,
         train_population=train_population,
