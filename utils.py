@@ -104,9 +104,7 @@ def closest_sequence(
         # effectively random.
         return AA_comparisons[max(AA_comparisons.keys())]
 
-    new_pbp_sequence = [
-        check_amino_acid(j, i) for i, j in enumerate(pbp_sequence)
-    ]
+    new_pbp_sequence = [check_amino_acid(j, i) for i, j in enumerate(pbp_sequence)]
     new_pbp_sequence = "".join(new_pbp_sequence)  # type: ignore
 
     return pbp_data[pbp_type], new_pbp_sequence, "inferred_type"
@@ -157,9 +155,7 @@ def infer_sequences(
         ].drop_duplicates()
 
         training_sequence_array = np.vstack(
-            training_types_and_sequences[pbp_seq].apply(
-                lambda x: np.array(list(x))
-            )
+            training_types_and_sequences[pbp_seq].apply(lambda x: np.array(list(x)))
         )  # stack sequences in the training data as array of characters
 
         if method == "blosum":
@@ -238,9 +234,7 @@ def _data_processing(
     if standardise_training_MIC:
         train = standardise_MICs(train)
     if standardise_test_and_val_MIC:
-        test_datasets = {
-            k: standardise_MICs(v) for k, v in test_datasets.items()
-        }
+        test_datasets = {k: standardise_MICs(v) for k, v in test_datasets.items()}
 
     for pbp in pbp_patterns:
 
@@ -310,10 +304,7 @@ def load_data(
 population_2 should be unique and should be either of cdc, maela, or pmen"
         )
 
-    if (
-        len([i for i in [blosum_inference, HMM_inference, filter_unseen] if i])
-        > 1
-    ):
+    if len([i for i in [blosum_inference, HMM_inference, filter_unseen] if i]) > 1:
         raise ValueError(
             "At most one of blosum inference, HMM_inference, or filter_unseen can be true"  # noqa: E501
         )
@@ -384,10 +375,7 @@ def load_extended_sequence_data(
     standardise_test_and_val_MIC: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
-    if (
-        len([i for i in [blosum_inference, HMM_inference, filter_unseen] if i])
-        > 1
-    ):
+    if len([i for i in [blosum_inference, HMM_inference, filter_unseen] if i]) > 1:
         raise ValueError(
             "At most one of blosum inference, HMM_inference, or filter_unseen can be true"  # noqa: E501
         )
@@ -450,6 +438,7 @@ def bin_labels(
     bin_size = (
         bin_size if bin_size >= 1 else 1
     )  # round up cause if less than 1 will not work with accuracy function
+    bin_size = round(bin_size)  # ensure is integer
 
     min_value = int(np.floor(min(labels)))
     max_value = int(np.floor(max(labels)))
@@ -557,9 +546,7 @@ class ResultsContainer:
         )
 
 
-def ordinal_regression_format(
-    data: Dict, minor_variant_frequency: float
-) -> Dict:
+def ordinal_regression_format(data: Dict, minor_variant_frequency: float) -> Dict:
     x = np.array(data["train"][0].todense())
     y = data["train"][1].apply(math.floor)
     y_adjusted = y + abs(y.min())  # modelling is easier if all >= 0
@@ -582,15 +569,11 @@ def ordinal_regression_format(
         x = np.array(data[i][0].todense())
         y_ = data[i][1].apply(math.floor)
         training_phenotype_idx = y_.isin(y)
-        y_ = y_.loc[
-            training_phenotype_idx
-        ]  # remove phenotypes not in training set
+        y_ = y_.loc[training_phenotype_idx]  # remove phenotypes not in training set
         x = x[training_phenotype_idx, :]
         y_ = y_ + abs(y_.min())
 
-        y = pd.Series(
-            pd.Categorical(y_, sorted(y_train.unique()), ordered=True)
-        )
+        y = pd.Series(pd.Categorical(y_, sorted(y_train.unique()), ordered=True))
 
         data[i][0] = x[:, idx]
         data[i][1] = y[np.isin(y, y_train)]
