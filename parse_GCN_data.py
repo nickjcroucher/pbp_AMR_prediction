@@ -28,7 +28,9 @@ def tree_to_graph(tree_file: str) -> Tuple[coo_matrix, List]:
     return adj_tensor, list(G.nodes)
 
 
-def load_features() -> Tuple[np.ndarray, np.ndarray, csr_matrix]:
+def load_features(
+    drop_duplicates: bool = False,
+) -> Tuple[np.ndarray, np.ndarray, csr_matrix]:
     pbp_patterns = ["a1", "b2", "x2"]
 
     cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
@@ -60,6 +62,17 @@ def load_features() -> Tuple[np.ndarray, np.ndarray, csr_matrix]:
     maela = maela.assign(id="maela_" + maela.id)
     ids = pd.concat([i.id for i in [cdc, pmen, maela]])
     ids = ids.str.replace("#", "_").values  # to match names in tree
+
+    if drop_duplicates:
+        dense_features = node_features.todense()
+        df = pd.DataFrame(dense_features, index=ids)
+        df = df.sample(frac=1, random_state=0)  # shuffles the rows
+        df = df.drop_duplicates()
+
+        id_mic_dict = {i: mic for i, mic in zip(ids, mics)}
+        ids = df.index.values
+        mics = np.array([id_mic_dict[i] for i in ids])
+        node_features = csr_matrix(df.values)
 
     return ids, mics, node_features
 
@@ -255,23 +268,29 @@ def load_data(
     graph_laplacian: bool = True,
     tree: bool = False,
     hamming_dist_network: bool = True,
+    hd_cuttoff: float = 0.005,
+    drop_duplicates: bool = False,
 ) -> Dict:
     if sum([tree, hamming_dist_network]) != 1:
         raise ValueError("One of tree and hamming_dist_network must be True")
 
-    ids, mics, node_features = load_features()
+    ids, mics, node_features = load_features(drop_duplicates=drop_duplicates)
 
     if tree:
         tree_file = "iqtree/PBP_alignment.fasta.treefile"
         adj_tensor, nodes_list = tree_to_graph(tree_file)
         sorted_features = map_features_to_graph(nodes_list, ids, mics, node_features)
     elif hamming_dist_network:
-        parquet_path = "hamming_distance_network/hamming_dists.parquet"
-        adj_tensor = load_hamming_dist_network(parquet_path, ids)
+        if drop_duplicates:
+            parquet_path = "hamming_distance_network/unduplicated_hamming_dists.parquet"
+        else:
+            parquet_path = "hamming_distance_network/hamming_dists.parquet"
+        adj_tensor = load_hamming_dist_network(parquet_path, ids, cutoff=hd_cuttoff)
         sorted_features = np.concatenate(
             (np.expand_dims(ids, 1), np.expand_dims(mics, 1), node_features.todense()),
             axis=1,
         )
+        sorted_features = np.array(sorted_features)
 
     CV_indices = get_CV_indices(
         sorted_features,

@@ -1,5 +1,4 @@
 import pickle
-import sys
 import time
 from multiprocessing import cpu_count
 from typing import Tuple
@@ -18,15 +17,21 @@ from utils import accuracy, mean_acc_per_bin
 torch.set_num_threads(cpu_count() - 2)
 
 EPOCHS = 100
-LAPLACIAN = True
-TRAIN_POPULATION = sys.argv[1]
-TEST_POPULATION_1 = sys.argv[2]
+LAPLACIAN = False
+HAMMING_DIST_NETWORK = True
+TREE = False
+DROP_DUPLICATES = True
+TRAIN_POPULATION = "cdc"
+TEST_POPULATION_1 = "pmen"
 
 data = load_data(
     filter_constant_features=True,
     train_population=TRAIN_POPULATION,
     test_population_1=TEST_POPULATION_1,
     graph_laplacian=LAPLACIAN,
+    tree=TREE,
+    hamming_dist_network=HAMMING_DIST_NETWORK,
+    drop_duplicates=DROP_DUPLICATES,
 )
 X = data["X"]
 y = data["y"]
