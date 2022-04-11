@@ -1,5 +1,6 @@
 import pickle
 import time
+from functools import partial
 from multiprocessing import cpu_count
 from typing import Tuple
 
@@ -146,7 +147,7 @@ def plot_metrics(metrics_df: pd.DataFrame, metric: str):
     plt.clf()
 
 
-def train_evaluate(**kwargs):
+def train_evaluate(lr: float, **kwargs):
     weight_decay = kwargs.pop("weight_decay")
     kwargs = {k: int(v) if k != "dropout" else v for k, v in kwargs.items()}
     torch.manual_seed(0)
@@ -159,6 +160,7 @@ def train_evaluate(**kwargs):
 
 
 def optimise_hps(
+    lr: float = 0.001,
     init_points: int = 10,
     n_iter: int = 15,
 ) -> BayesianOptimization:
@@ -170,12 +172,15 @@ def optimise_hps(
         "dropout": [0.05, 0.4],
         "weight_decay": [0.01, 0.3],
     }
-    optimizer = BayesianOptimization(f=train_evaluate, pbounds=pbounds, random_state=0)
+    partial_fitting_function = partial(train_evaluate, lr=lr)
+    optimizer = BayesianOptimization(
+        f=partial_fitting_function, pbounds=pbounds, random_state=0
+    )
     optimizer.maximize(init_points=init_points, n_iter=n_iter)
     return optimizer
 
 
-def main() -> Tuple[GCN, pd.DataFrame]:
+def main(lr: float = 0.001) -> Tuple[GCN, pd.DataFrame]:
     bayes_optimizer = optimise_hps()
     params = bayes_optimizer.max["params"]
     weight_decay = params.pop("weight_decay")
