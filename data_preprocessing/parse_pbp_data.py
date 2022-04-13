@@ -7,7 +7,6 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import OneHotEncoder
 from scipy import sparse
-from scipy.stats.distributions import norm
 
 AMINO_ACIDS = [
     "A",
@@ -199,8 +198,8 @@ def standardise_MICs(df: pd.DataFrame) -> pd.DataFrame:
     """
 
     def standardise_MICs_(data):
-        mean_log_mic = norm.fit(data.log2_mic, scale=1)[0]
-        data.log2_mic = [mean_log_mic] * len(data)
+        median_log_mic = data.log2_mic.median()
+        data.log2_mic = [median_log_mic] * len(data)
         return data
 
     df = df.groupby("isolates").apply(standardise_MICs_)
