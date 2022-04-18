@@ -1,3 +1,4 @@
+import os
 import pickle
 import time
 from functools import partial
@@ -18,10 +19,13 @@ from utils import accuracy, mean_acc_per_bin
 torch.set_num_threads(cpu_count() - 2)
 
 EPOCHS = 100
-LAPLACIAN = False
-HAMMING_DIST_NETWORK = True
+LAPLACIAN = True
+HAMMING_DIST_NETWORK = False
 TREE = False
-DROP_DUPLICATES = True
+HAMMING_DIST_TREE = True
+DROP_DUPLICATES = False
+RANK_HAMMING_DISTANCE = False
+HD_CUTTOFF = 0.005
 TRAIN_POPULATION = "cdc"
 TEST_POPULATION_1 = "pmen"
 
@@ -31,8 +35,10 @@ data = load_data(
     test_population_1=TEST_POPULATION_1,
     graph_laplacian=LAPLACIAN,
     tree=TREE,
+    hamming_dist_tree=HAMMING_DIST_TREE,
     hamming_dist_network=HAMMING_DIST_NETWORK,
     drop_duplicates=DROP_DUPLICATES,
+    ranked_hamming_distance=RANK_HAMMING_DISTANCE,
 )
 X = data["X"]
 y = data["y"]
@@ -164,14 +170,24 @@ def optimise_hps(
     init_points: int = 10,
     n_iter: int = 15,
 ) -> BayesianOptimization:
-    pbounds = {
-        "nhid_2": [200, 1500],
-        "nhid_3": [100, 1000],
-        "nhid_4": [100, 1000],
-        "nhid_5": [50, 250],
-        "dropout": [0.05, 0.4],
-        "weight_decay": [0.01, 0.3],
-    }
+    if DROP_DUPLICATES:
+        pbounds = {
+            "nhid_2": [20, 150],
+            "nhid_3": [10, 100],
+            "nhid_4": [10, 100],
+            "nhid_5": [5, 25],
+            "dropout": [0.05, 0.4],
+            "weight_decay": [0.01, 0.3],
+        }
+    else:
+        pbounds = {
+            "nhid_2": [200, 1500],
+            "nhid_3": [100, 1000],
+            "nhid_4": [100, 1000],
+            "nhid_5": [50, 250],
+            "dropout": [0.05, 0.4],
+            "weight_decay": [0.01, 0.3],
+        }
     partial_fitting_function = partial(train_evaluate, lr=lr)
     optimizer = BayesianOptimization(
         f=partial_fitting_function, pbounds=pbounds, random_state=0
@@ -203,9 +219,17 @@ def save_results(metrics_df: pd.DataFrame):
         "train_population": TRAIN_POPULATION,
         "test_population_1": TEST_POPULATION_1,
     }
-    dest = (
-        f"./results/phylogeny_GNN_model/GNN_{TRAIN_POPULATION}_{TEST_POPULATION_1}.pkl"
-    )
+    if HAMMING_DIST_NETWORK:
+        network = "hamming_dist_network"
+    elif HAMMING_DIST_TREE:
+        network = "hamming_dist_tree"
+    elif TREE:
+        network = "tree"
+
+    target_dir = f"./results/phylogeny_GNN_model/{network}"
+    os.makedirs(target_dir, exist_ok=True)
+
+    dest = os.path.join(target_dir, f"GNN_{TRAIN_POPULATION}_{TEST_POPULATION_1}.pkl")
     with open(dest, "wb") as a:
         pickle.dump(data, a)
 

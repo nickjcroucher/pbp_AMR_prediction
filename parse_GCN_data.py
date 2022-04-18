@@ -20,7 +20,7 @@ from utils import _data_processing
 def tree_to_graph(tree_file: str) -> Tuple[coo_matrix, List]:
     Tree = Phylo.read(tree_file, "newick")
     G = Phylo.to_networkx(Tree)
-    adj = nx.adjacency_matrix(G, nodelist=G.nodes)
+    adj = nx.adjacency_matrix(G, nodelist=G.nodes, weight=None)
     adj = identity(adj.shape[0]) + adj
     adj = adj.tocoo()
     adj_tensor = torch.sparse_coo_tensor([adj.row, adj.col], adj.data)
@@ -267,11 +267,13 @@ def load_data(
     test_population_1: Optional[str] = None,
     graph_laplacian: bool = True,
     tree: bool = False,
-    hamming_dist_network: bool = True,
+    hamming_dist_network: bool = False,
+    hamming_dist_tree: bool = True,
     hd_cuttoff: float = 0.005,
     drop_duplicates: bool = False,
+    ranked_hamming_distance: bool = False,
 ) -> Dict:
-    if sum([tree, hamming_dist_network]) != 1:
+    if sum([tree, hamming_dist_network, hamming_dist_tree]) != 1:
         raise ValueError("One of tree and hamming_dist_network must be True")
 
     ids, mics, node_features = load_features(drop_duplicates=drop_duplicates)
@@ -280,7 +282,17 @@ def load_data(
         tree_file = "iqtree/PBP_alignment.fasta.treefile"
         adj_tensor, nodes_list = tree_to_graph(tree_file)
         sorted_features = map_features_to_graph(nodes_list, ids, mics, node_features)
+    elif hamming_dist_tree:
+        tree_file = "hamming_distance_network/ranked_hamming_distance_NJ_tree.nwk"
+        adj_tensor, nodes_list = tree_to_graph(tree_file)
+        sorted_features = map_features_to_graph(nodes_list, ids, mics, node_features)
     elif hamming_dist_network:
+        if ranked_hamming_distance:
+            parquet_path = "hamming_distance_network/ranked_hamming_dists.parquet"
+            if drop_duplicates:
+                raise ValueError(
+                    "ranked hamming distances without duplicates is not yet available"
+                )
         if drop_duplicates:
             parquet_path = "hamming_distance_network/unduplicated_hamming_dists.parquet"
         else:
