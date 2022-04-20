@@ -1,6 +1,9 @@
+#!/usr/bin/env python3
+
 import os
 import pickle
 import time
+import sys
 from functools import partial
 from multiprocessing import cpu_count
 from typing import Tuple
@@ -12,7 +15,7 @@ import torch
 import torch.nn.functional as F
 from bayes_opt import BayesianOptimization
 
-from models.phylogeny_GNN_model import GCN
+from models.phylogeny_GNN_model import GCN, SpGAT
 from parse_GCN_data import load_data
 from utils import accuracy, mean_acc_per_bin
 
@@ -26,8 +29,8 @@ HAMMING_DIST_TREE = True
 DROP_DUPLICATES = False
 RANK_HAMMING_DISTANCE = False
 HD_CUTTOFF = 0.005
-TRAIN_POPULATION = "cdc"
-TEST_POPULATION_1 = "pmen"
+TRAIN_POPULATION = sys.argv[1]
+TEST_POPULATION_1 = sys.argv[2]
 
 data = load_data(
     filter_constant_features=True,
@@ -153,11 +156,16 @@ def plot_metrics(metrics_df: pd.DataFrame, metric: str):
     plt.clf()
 
 
-def train_evaluate(lr: float, **kwargs):
+def train_evaluate(lr: float, model_class: str, **kwargs):
     weight_decay = kwargs.pop("weight_decay")
     kwargs = {k: int(v) if k != "dropout" else v for k, v in kwargs.items()}
+
     torch.manual_seed(0)
-    model = GCN(X.shape[1], X.shape[1], **kwargs, nclass=1)
+    if model_class == "GCN":
+        model = GCN(X.shape[1], X.shape[1], **kwargs, nclass=1)
+    elif model_class == "SpGAT":
+        model = SpGAT(X.shape[1], **kwargs, nclass=1)
+
     optimizer = torch.optim.Adam(model.parameters(), weight_decay=weight_decay)
     for epoch in range(EPOCHS):
         model, optimizer = train(epoch, model, optimizer)
@@ -166,27 +174,39 @@ def train_evaluate(lr: float, **kwargs):
 
 
 def optimise_hps(
+    model_class: str,
     lr: float = 0.001,
     init_points: int = 10,
     n_iter: int = 15,
 ) -> BayesianOptimization:
-    if DROP_DUPLICATES:
+    if model_class == "GCN":
+        if DROP_DUPLICATES:
+            pbounds = {
+                "nhid_2": [20, 150],
+                "nhid_3": [10, 100],
+                "nhid_4": [10, 100],
+                "nhid_5": [5, 25],
+                "dropout": [0.05, 0.4],
+                "weight_decay": [0.01, 0.3],
+            }
+        else:
+            pbounds = {
+                "nhid_2": [200, 1500],
+                "nhid_3": [100, 1000],
+                "nhid_4": [100, 1000],
+                "nhid_5": [50, 250],
+                "dropout": [0.05, 0.4],
+                "weight_decay": [0.01, 0.3],
+            }
+    elif model_class == "SpGAT":
+        if DROP_DUPLICATES:
+            raise NotImplementedError("DROP_DUPLICATES with SpGAT")
         pbounds = {
-            "nhid_2": [20, 150],
-            "nhid_3": [10, 100],
-            "nhid_4": [10, 100],
-            "nhid_5": [5, 25],
+            "nhid": [2, 10],
+            "nheads": [2, 10],
             "dropout": [0.05, 0.4],
             "weight_decay": [0.01, 0.3],
-        }
-    else:
-        pbounds = {
-            "nhid_2": [200, 1500],
-            "nhid_3": [100, 1000],
-            "nhid_4": [100, 1000],
-            "nhid_5": [50, 250],
-            "dropout": [0.05, 0.4],
-            "weight_decay": [0.01, 0.3],
+            "alpha": [0.01, 0.3],
         }
     partial_fitting_function = partial(train_evaluate, lr=lr)
     optimizer = BayesianOptimization(
@@ -196,19 +216,25 @@ def optimise_hps(
     return optimizer
 
 
-def main(lr: float = 0.001) -> Tuple[GCN, pd.DataFrame]:
-    bayes_optimizer = optimise_hps()
+def main(lr: float = 0.001, model_class: str = "GCN") -> Tuple[GCN, pd.DataFrame]:
+    bayes_optimizer = optimise_hps(model_class)
     params = bayes_optimizer.max["params"]
     weight_decay = params.pop("weight_decay")
     params = {k: int(v) if k != "dropout" else v for k, v in params.items()}
+
     torch.manual_seed(0)
-    model = GCN(X.shape[1], X.shape[1], **params, nclass=1)
+    if model_class == "GCN":
+        model = GCN(X.shape[1], X.shape[1], **params, nclass=1)
+    elif model_class == "SpGAT":
+        model = SpGAT(X.shape[1], **params, nclass=1)
+
     optimizer = torch.optim.Adam(model.parameters(), weight_decay=weight_decay)
     for epoch in range(EPOCHS):
         model, optimizer = train(
             epoch, model, optimizer, verbose=True, record_metrics=True
         )
         test(model, record_metrics=True)
+
     metrics_df = pd.DataFrame(metrics_dict)
     return model, metrics_df
 
