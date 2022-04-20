@@ -3,17 +3,17 @@
 fit_model () {
     # run with testing populations in each order
 
-    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $3 --test_pop_2 $4 --blosum_inference 
-    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $4 --test_pop_2 $3 --blosum_inference
+    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $3 --test_pop_2 $4 --blosum_inference --single_PBP_MIC_representative
+    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $4 --test_pop_2 $3 --blosum_inference --single_PBP_MIC_representative
 
-    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $3 --test_pop_2 $4 --HMM_inference 
-    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $4 --test_pop_2 $3 --HMM_inference
+    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $3 --test_pop_2 $4 --HMM_inference --single_PBP_MIC_representative
+    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $4 --test_pop_2 $3 --HMM_inference --single_PBP_MIC_representative
 
-    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $3 --test_pop_2 $4 --HMM_MIC_inference 
-    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $4 --test_pop_2 $3 --HMM_MIC_inference
+    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $3 --test_pop_2 $4 --HMM_MIC_inference --single_PBP_MIC_representative
+    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $4 --test_pop_2 $3 --HMM_MIC_inference --single_PBP_MIC_representative
 
-    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $3 --test_pop_2 $4 --blosum_inference --just_HMM_scores
-    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $4 --test_pop_2 $3 --blosum_inference --just_HMM_scores
+    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $3 --test_pop_2 $4 --blosum_inference --just_HMM_scores --single_PBP_MIC_representative
+    ./fit_models.py --model_type $1 --train_pop $2 --test_pop_1 $4 --test_pop_2 $3 --blosum_inference --just_HMM_scores --single_PBP_MIC_representative
 
 }
 

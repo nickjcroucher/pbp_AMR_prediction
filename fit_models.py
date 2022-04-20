@@ -25,6 +25,7 @@ from model_analysis.parse_random_forest import DecisionTree_
 from models.supervised_models import _fit_en, _fit_lasso, _fit_rf, _fit_ord_reg
 from models.unsupervised_models import _fit_DBSCAN, _fit_DBSCAN_with_UMAP
 from models.HMM_model import get_HMM_scores, ProfileHMMPredictor
+from data_preprocessing.parse_pbp_data import standardise_MICs
 from utils import (
     accuracy,
     load_data,
@@ -152,6 +153,7 @@ def load_and_format_data(
     just_HMM_scores: bool = False,
     standardise_training_MIC: bool = False,
     standardise_test_and_val_MIC: bool = False,
+    single_PBP_MIC_representative: bool = False,
     extended_sequences: bool = False,
 ) -> Dict:
 
@@ -177,7 +179,7 @@ def load_and_format_data(
         train, test_1, test_2, val = load_data(
             train_data_population=train_data_population,
             test_data_population_1=test_data_population_1,
-            test_data_population_2=test_data_population_2,  # type: ignore
+            test_data_population_2=test_data_population_2,
             blosum_inference=blosum_inference,
             HMM_inference=HMM_inference,
             HMM_MIC_inference=HMM_MIC_inference,
@@ -190,6 +192,19 @@ def load_and_format_data(
             "test_1": test_1,
             "test_2": test_2,
             "val": val,
+        }
+
+    if single_PBP_MIC_representative:
+        df = pd.concat([v.assign(pop=k) for k, v in original_datasets.items()])
+        df = df.sample(frac=1, random_state=0)  # shuffle rows
+        df_uniq = df.iloc[df[["isolates", "log2_mic"]].drop_duplicates().index]
+        standardised_datasets = {
+            k: v.reset_index(drop=True).drop(columns="pop")
+            for k, v in df_uniq.groupby("pop")
+        }
+        # same order
+        original_datasets = {
+            k: standardised_datasets[k] for k in original_datasets.keys()
         }
 
     datasets = {
@@ -398,16 +413,16 @@ def parse_args() -> Dict:
     )
     parser.add_argument(
         "--standardise_training_MIC",
-        type=bool,
         default=True,
-        help="Where multiple MICs are reported for same PBP type, sets all to mean of fitted normal distribution",  # noqa: E501
+        action="store_true",
+        help="Where multiple MICs are reported for same PBP type, sets all to median",  # noqa: E501
     )
     parser.add_argument(
         "--standardise_testing_MIC",
         dest="standardise_test_and_val_MIC",
-        type=bool,
+        action="store_true",
         default=False,
-        help="Where multiple MICs are reported for same PBP type, sets all to mean of fitted normal distribution",  # noqa: E501
+        help="Where multiple MICs are reported for same PBP type, sets all to median",  # noqa: E501
     )
     parser.add_argument(
         "--previous_rf_model",
@@ -417,9 +432,15 @@ def parse_args() -> Dict:
     )
     parser.add_argument(
         "--extended_sequences",
-        type=bool,
+        action="store_true",
         default=False,
         help="Fit model to extended sequences",
+    )
+    parser.add_argument(
+        "--single_PBP_MIC_representative",
+        action="store_true",
+        default=False,
+        help="Standardise all MICs and only use single representative for each PBP",
     )
 
     return vars(parser.parse_args())  # return as a dictionary
@@ -441,6 +462,7 @@ def main(
     standardise_test_and_val_MIC: bool = False,
     previous_rf_model: str = None,
     extended_sequences: bool = False,
+    single_PBP_MIC_representative: bool = False,
 ):
 
     logging.info("Loading data")
@@ -456,6 +478,7 @@ def main(
         just_HMM_scores=just_HMM_scores,
         standardise_training_MIC=standardise_training_MIC,
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
+        single_PBP_MIC_representative=single_PBP_MIC_representative,
         extended_sequences=extended_sequences,
     )
 
@@ -472,7 +495,7 @@ def main(
     elif model_type == "lasso":
         pbounds = {"alpha": [0.05, 1.95]}
     elif model_type == "random_forest":
-        if just_HMM_scores:
+        if just_HMM_scores or single_PBP_MIC_representative:
             pbounds = {
                 "n_estimators": [50, 500],
                 "max_depth": [1, 5],
@@ -571,6 +594,8 @@ def main(
 
     if extended_sequences:
         outdir = f"results/extended_sequences/{model_type}"
+    if single_PBP_MIC_representative:
+        outdir = f"results/single_pbp_mic_representative/{model_type}"
     else:
         outdir = f"results/{model_type}"
     if just_HMM_scores:
