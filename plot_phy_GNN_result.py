@@ -9,7 +9,7 @@ import seaborn as sns
 from plot_model_fits import load_data as load_data_, process_data
 
 
-def load_GNN_results(results_dir: str = "results/phylogeny_GNN_model/") -> pd.DataFrame:
+def load_GNN_results(results_dir: str) -> pd.DataFrame:
     results_files = os.listdir(results_dir)
     all_results = {
         "train_pop": [],
@@ -103,8 +103,35 @@ def plot_metric(all_results: pd.DataFrame, metric: str = "mean_acc_per_bin"):
         ax.get_legend().remove()
 
 
+def single_pop_plot_metric(
+    all_results: pd.DataFrame, metric: str = "mean_acc_per_bin", pop: str = "cdc"
+):
+    results = all_results.loc[
+        (all_results.metric == metric) & (all_results["Train Population"] == pop)
+    ]
+    plt.clf()
+    g = sns.FacetGrid(
+        results,
+        col="Test Population 1",
+    )
+    g.map(
+        sns.barplot,
+        "Population",
+        "score",
+        "Model",
+        hue_order=["GNN", "random_forest"],
+        order=["Train", "Validate", "Test1", "Test2"],
+        palette=sns.color_palette(["tab:blue", "tab:orange"]),
+    )
+    g.add_legend()
+    g.fig.subplots_adjust(top=0.8)
+    g.fig.suptitle(f"Models Trained on {pop.upper()}")
+
+
 if __name__ == "__main__":
-    GNN_results = load_GNN_results()
+    GNN_results = load_GNN_results("results/phylogeny_GNN_model/hamming_dist_tree")
     other_model_results = load_other_results()
     all_results = pd.concat([GNN_results, other_model_results])
-    plot_metric(all_results)
+    for train_pop in all_results["Train Population"].drop_duplicates():
+        single_pop_plot_metric(all_results, pop=train_pop)
+        plt.savefig(f"GNN_vs_RF_train_pop_{train_pop}.png")
