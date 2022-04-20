@@ -1,15 +1,13 @@
 import os
-import matplotlib.pyplot as plt
 import pickle
+from itertools import product
 from typing import Dict, List
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
 from utils import ResultsContainer
-
-
-POPULATIONS = ["cdc", "pmen", "maela"]
 
 
 def plot_metrics(all_metrics: Dict[str, pd.DataFrame], train_pop: str, output_dir: str):
@@ -88,7 +86,7 @@ def load_data(
     train_pop: str,
     inference_method: str,
     just_hmm_scores: bool = False,
-    models=["random_forest", "DBSCAN", "DBSCAN_with_UMAP"],
+    models=["random_forest", "DBSCAN", "DBSCAN_with_UMAP", "elastic_net"],
 ) -> List[ResultsContainer]:
     all_data = []
     for model in models:
@@ -107,13 +105,16 @@ def load_data(
 
 
 def main():
-    for train_pop in POPULATIONS:
-        data = load_data(train_pop, "HMM_MIC")
+    populations = ["cdc", "pmen", "maela"]
+    inference_methods = ["blosum", "HMM", "HMM_MIC"]
+
+    for train_pop, inference_method in product(populations, inference_methods):
+        data = load_data(train_pop, inference_method)
         all_metrics = process_data(data)
         plot_metrics(
             all_metrics,
             train_pop,
-            output_dir="figures/model_and_pop_permutations/hmm_inferred",
+            output_dir=f"figures/model_and_pop_permutations/{inference_method}_inferred",
         )
 
 
