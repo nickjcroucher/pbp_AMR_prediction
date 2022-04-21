@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from sklearn.metrics import pairwise_distances
 
 from utils import load_data
@@ -62,11 +63,30 @@ def hamming_distance_matrix(encoded_seqs: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(dists, columns=encoded_seqs.index, index=encoded_seqs.index)
 
 
+def rank_hamming_distances(hamming_dists: pd.DataFrame) -> pd.DataFrame:
+    uniq_distances = pd.Series(np.unique(hamming_dists.values.flatten()))
+    ranked_distances = uniq_distances.rank()
+    rank_distances_dict = {
+        uniq_distances.iloc[i]: ranked_distances.iloc[i] for i in uniq_distances.index
+    }
+    return pd.concat(
+        [
+            hamming_dists[i].apply(lambda x: rank_distances_dict[x])
+            for i in tqdm(hamming_dists.columns, desc="Ranking Hamming Distances")
+        ],
+        axis=1,
+    )
+
+
 if __name__ == "__main__":
-    n = 4
+    n = 1
     df = get_data(n)
     encoded_seqs = encoding(df)
     hamming_dists = hamming_distance_matrix(encoded_seqs)
+    ranked_hamming_dists = rank_hamming_distances(hamming_dists)
     hamming_dists.to_parquet(
         f"hamming_distance_network/{n}_duplicates_hamming_dists.parquet"
+    )
+    ranked_hamming_dists.to_parquet(
+        f"hamming_distance_network/{n}_duplicates_ranked_hamming_dists.parquet"
     )

@@ -612,8 +612,8 @@ def main(
 
     if extended_sequences:
         outdir = f"results/extended_sequences/{model_type}"
-    if single_PBP_MIC_representative:
-        outdir = f"results/single_pbp_mic_representative/{model_type}"
+    if n_PBP_representatives != -1:
+        outdir = f"results/{n_PBP_representatives}_pbp_mic_representative/{model_type}"
     else:
         outdir = f"results/{model_type}"
     if just_HMM_scores:

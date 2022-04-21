@@ -78,11 +78,15 @@ def load_features(
 
 
 def load_hamming_dist_network(
-    parquet_path: str, ids: np.ndarray, cutoff: float = 0.018
+    parquet_path: str, ids: Optional[np.ndarray] = None, cutoff: float = 0.018
 ):
     dists = pd.read_parquet(parquet_path)
-    dists = dists.reindex(index=ids, columns=ids)  # ensure correct order
-    return torch.Tensor(dists.values < cutoff).to_sparse()
+    if ids is not None:
+        dists = dists.reindex(index=ids, columns=ids)  # ensure correct order
+        return torch.Tensor(dists.values < cutoff).to_sparse()
+    else:
+        adj_tensor = torch.Tensor(dists.values < cutoff).to_sparse()
+        return adj_tensor, dists.index
 
 
 def select_items(
@@ -267,13 +271,18 @@ def load_data(
     test_population_1: Optional[str] = None,
     graph_laplacian: bool = True,
     tree: bool = False,
+    n_duplicates_hd_network: bool = False,
     hamming_dist_network: bool = False,
     hamming_dist_tree: bool = True,
     hd_cuttoff: float = 0.005,
     drop_duplicates: bool = False,
     ranked_hamming_distance: bool = False,
+    n: int = 3,
 ) -> Dict:
-    if sum([tree, hamming_dist_network, hamming_dist_tree]) != 1:
+    if (
+        sum([tree, hamming_dist_network, hamming_dist_tree, n_duplicates_hd_network])
+        != 1
+    ):
         raise ValueError("One of tree and hamming_dist_network must be True")
 
     ids, mics, node_features = load_features(drop_duplicates=drop_duplicates)
@@ -303,6 +312,39 @@ def load_data(
             axis=1,
         )
         sorted_features = np.array(sorted_features)
+    elif n_duplicates_hd_network:
+        if ranked_hamming_distance:
+            parquet_path = (
+                f"hamming_distance_network/{n}_duplicates_ranked_hamming_dists.parquet"
+            )
+        else:
+            parquet_path = (
+                f"hamming_distance_network/{n}_duplicates_hamming_dists.parquet"
+            )
+        adj_tensor, samples_order = load_hamming_dist_network(
+            parquet_path, ids=None, cutoff=hd_cuttoff
+        )
+
+        # order the samples
+        samples_df = pd.DataFrame(
+            np.concatenate((np.expand_dims(mics, 1), node_features.todense()), axis=1),
+            index=ids,
+        )
+        samples_df = samples_df.loc[samples_df.index.isin(samples_order)]
+        samples_df = (
+            samples_df.assign(
+                id=pd.Categorical(
+                    samples_df.index, categories=samples_order, ordered=True
+                )
+            )
+            .sort_values("id")
+            .drop(columns="id")
+        )
+
+        sorted_features = samples_df.reset_index().values
+        # ids = samples_df.index.values
+        # mics = samples_df[0].values
+        # node_features = csr_matrix(samples_df[samples_df.columns[1:]])
 
     CV_indices = get_CV_indices(
         sorted_features,
