@@ -1,6 +1,7 @@
 import os
 import pickle
 from itertools import product
+from typing import List
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -70,10 +71,16 @@ def load_GNN_results(results_dir: str) -> pd.DataFrame:
     ]
 
 
-def load_other_results(inference_method: str = "HMM_MIC") -> pd.DataFrame:
+def load_other_results(
+    root_dir: str = "results",
+    inference_method: str = "HMM_MIC",
+    models: List[str] = ["random_forest"],
+) -> pd.DataFrame:
     populations = ["cdc", "pmen", "maela"]
     all_metrics = [
-        process_data(load_data_(train_pop, inference_method, models=["random_forest"]))
+        process_data(
+            load_data_(train_pop, inference_method, root_dir=root_dir, models=models)
+        )
         for train_pop in populations
     ]
     return pd.concat(
