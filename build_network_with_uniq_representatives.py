@@ -3,10 +3,10 @@ import pandas as pd
 from sklearn.metrics import pairwise_distances
 
 from utils import load_data
-from data_preprocessing.parse_pbp_data import encode_sequences
+from data_preprocessing.parse_pbp_data import encode_sequences, standardise_MICs
 
 
-def get_data() -> pd.DataFrame:
+def get_data(n_representatives: int) -> pd.DataFrame:
     """
     Same way data is loaded in fit_models.py
     """
@@ -18,7 +18,7 @@ def get_data() -> pd.DataFrame:
         HMM_inference=False,
         HMM_MIC_inference=False,
         filter_unseen=False,
-        standardise_training_MIC=True,
+        standardise_training_MIC=False,
         standardise_test_and_val_MIC=False,
     )
     original_datasets = {
@@ -28,12 +28,25 @@ def get_data() -> pd.DataFrame:
     }
 
     df = pd.concat([v.assign(pop=k) for k, v in original_datasets.items()])
+    df = standardise_MICs(df)
+
+    # sort using sample names to ensure same order with diff train test split
+    sorted_ids = df.id.sort_values(ignore_index=True)
+    sorted_ids = sorted_ids.sample(frac=1, random_state=0)
+    df = df.assign(id=pd.Categorical(df.id, categories=sorted_ids, ordered=True))
+    df = df.sort_values("id", ignore_index=True)
+    df = df.assign(id=df.id.astype("str"))  # return to original data type
+
     df.loc[df["pop"] == "pmen", "id"] = "pmen_" + df.loc[df["pop"] == "pmen", "id"]
     df.loc[df["pop"] == "maela", "id"] = "maela_" + df.loc[df["pop"] == "maela", "id"]
     df = df.assign(id=df.id.str.replace("#", "_"))
 
     df = df.sample(frac=1, random_state=0)  # shuffle rows
-    return df.iloc[df[["isolates", "log2_mic"]].drop_duplicates().index]
+    return (
+        df.groupby(["isolates", "log2_mic"])
+        .apply(lambda x: x.head(n_representatives))
+        .reset_index(drop=True)
+    )
 
 
 def encoding(df: pd.DataFrame) -> pd.DataFrame:
@@ -50,9 +63,10 @@ def hamming_distance_matrix(encoded_seqs: pd.DataFrame) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    df = get_data()
+    n = 4
+    df = get_data(n)
     encoded_seqs = encoding(df)
     hamming_dists = hamming_distance_matrix(encoded_seqs)
     hamming_dists.to_parquet(
-        "hamming_distance_network/unique_PBP_representative_hds.parquet"
+        f"hamming_distance_network/{n}_duplicates_hamming_dists.parquet"
     )

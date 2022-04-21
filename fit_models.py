@@ -153,9 +153,14 @@ def load_and_format_data(
     just_HMM_scores: bool = False,
     standardise_training_MIC: bool = False,
     standardise_test_and_val_MIC: bool = False,
-    single_PBP_MIC_representative: bool = False,
+    n_PBP_representatives: int = -1,
     extended_sequences: bool = False,
 ) -> Dict:
+
+    # do the standardisation on the whole dataset rather than each split separately
+    if n_PBP_representatives > 0:
+        standardise_training_MIC = False
+        standardise_test_and_val_MIC = False
 
     pbp_patterns = ["a1", "b2", "x2"]
 
@@ -194,10 +199,23 @@ def load_and_format_data(
             "val": val,
         }
 
-    if single_PBP_MIC_representative:
+    if n_PBP_representatives:
         df = pd.concat([v.assign(pop=k) for k, v in original_datasets.items()])
+        df = standardise_MICs(df)
+
+        # sort using sample names to ensure same order with diff train test split
+        sorted_ids = df.id.sort_values(ignore_index=True)
+        sorted_ids = sorted_ids.sample(frac=1, random_state=0)
+        df = df.assign(id=pd.Categorical(df.id, categories=sorted_ids, ordered=True))
+        df = df.sort_values("id", ignore_index=True)
+        df = df.assign(id=df.id.astype("str"))  # return to original data type
+
         df = df.sample(frac=1, random_state=0)  # shuffle rows
-        df_uniq = df.iloc[df[["isolates", "log2_mic"]].drop_duplicates().index]
+        df_uniq = (
+            df.groupby(["isolates", "log2_mic"])
+            .apply(lambda x: x.head(n_PBP_representatives))
+            .reset_index(drop=True)
+        )
         standardised_datasets = {
             k: v.reset_index(drop=True).drop(columns="pop")
             for k, v in df_uniq.groupby("pop")
@@ -437,10 +455,10 @@ def parse_args() -> Dict:
         help="Fit model to extended sequences",
     )
     parser.add_argument(
-        "--single_PBP_MIC_representative",
-        action="store_true",
-        default=False,
-        help="Standardise all MICs and only use single representative for each PBP",
+        "--n_PBP_representatives",
+        type=int,
+        default=-1,
+        help="Maximum copies of each MIC-PBP to use",
     )
 
     return vars(parser.parse_args())  # return as a dictionary
@@ -462,7 +480,7 @@ def main(
     standardise_test_and_val_MIC: bool = False,
     previous_rf_model: str = None,
     extended_sequences: bool = False,
-    single_PBP_MIC_representative: bool = False,
+    n_PBP_representatives: int = -1,
 ):
 
     logging.info("Loading data")
@@ -478,7 +496,7 @@ def main(
         just_HMM_scores=just_HMM_scores,
         standardise_training_MIC=standardise_training_MIC,
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
-        single_PBP_MIC_representative=single_PBP_MIC_representative,
+        n_PBP_representatives=n_PBP_representatives,
         extended_sequences=extended_sequences,
     )
 
@@ -495,7 +513,7 @@ def main(
     elif model_type == "lasso":
         pbounds = {"alpha": [0.05, 1.95]}
     elif model_type == "random_forest":
-        if just_HMM_scores or single_PBP_MIC_representative:
+        if just_HMM_scores or n_PBP_representatives != -1:
             pbounds = {
                 "n_estimators": [50, 500],
                 "max_depth": [1, 5],
