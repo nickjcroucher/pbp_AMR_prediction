@@ -6,7 +6,7 @@ import time
 import sys
 from functools import partial
 from multiprocessing import cpu_count
-from typing import Tuple
+from typing import Dict, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -25,10 +25,10 @@ EPOCHS = 100
 LAPLACIAN = True
 HAMMING_DIST_NETWORK = False
 TREE = False
-N_DUPLICATES_HD_NETWORK = True
-HAMMING_DIST_TREE = False
+N_DUPLICATES_HD_NETWORK = False
+HAMMING_DIST_TREE = True
 DROP_DUPLICATES = False
-RANK_HAMMING_DISTANCE = True
+RANK_HAMMING_DISTANCE = False
 HD_CUTTOFF = 5
 N = 3
 TRAIN_POPULATION = sys.argv[1]
@@ -221,7 +221,7 @@ def optimise_hps(
     return optimizer
 
 
-def main(lr: float = 0.001, model_class: str = "GCN") -> Tuple[GCN, pd.DataFrame]:
+def main(lr: float = 0.001, model_class: str = "GCN") -> Tuple[GCN, pd.DataFrame, Dict]:
     bayes_optimizer = optimise_hps(model_class)
     params = bayes_optimizer.max["params"]
     weight_decay = params.pop("weight_decay")
@@ -241,14 +241,16 @@ def main(lr: float = 0.001, model_class: str = "GCN") -> Tuple[GCN, pd.DataFrame
         test(model, record_metrics=True)
 
     metrics_df = pd.DataFrame(metrics_dict)
-    return model, metrics_df
+    return model, metrics_df, params
 
 
-def save_results(metrics_df: pd.DataFrame):
+def save_results(metrics_df: pd.DataFrame, model_params: Dict, model_state_dict: Dict):
     data = {
         "metrics_df": metrics_df,
         "train_population": TRAIN_POPULATION,
         "test_population_1": TEST_POPULATION_1,
+        "model_params": model_params,
+        "model_state_dict": model_state_dict,
     }
     if HAMMING_DIST_NETWORK:
         network = f"hamming_dist_network_cuttoff_{HD_CUTTOFF}"
@@ -273,5 +275,5 @@ def save_results(metrics_df: pd.DataFrame):
 
 
 if __name__ == "__main__":
-    model, metrics_df = main()
-    save_results(metrics_df)
+    model, metrics_df, model_params = main()
+    save_results(metrics_df, model_params, model.state_dict())

@@ -307,6 +307,8 @@ def load_data(
         else:
             parquet_path = "hamming_distance_network/hamming_dists.parquet"
         adj_tensor = load_hamming_dist_network(parquet_path, ids, cutoff=hd_cuttoff)
+        # TODO: add I to adj_tensor
+
         sorted_features = np.concatenate(
             (np.expand_dims(ids, 1), np.expand_dims(mics, 1), node_features.todense()),
             axis=1,
@@ -324,6 +326,7 @@ def load_data(
         adj_tensor, samples_order = load_hamming_dist_network(
             parquet_path, ids=None, cutoff=hd_cuttoff
         )
+        # TODO: add I to adj_tensor
 
         # order the samples
         samples_df = pd.DataFrame(
