@@ -3,7 +3,7 @@ from typing import List
 import numpy as np
 import torch
 
-from simplified_explainer import ExplainModule, load_neighborhoods
+from .simplified_explainer import ExplainModule, load_neighborhoods
 
 
 def extract_neighborhood(node_idx, adj, feat, labels, neighborhoods):
@@ -112,6 +112,6 @@ def main(
         adj, x, label, node_idx_new, neighbors = extract_neighborhood(
             node_idx, adj, feat, labels, neighborhoods
         )
-        pred_label = np.argmax(predictions[neighbors], axis=1)
+        pred_label = predictions[neighbors]
         explainer = train_explainer(x, adj, model, label, node_idx_new, pred_label)
         save_explanations(explainer, node_idx)
