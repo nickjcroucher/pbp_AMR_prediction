@@ -29,8 +29,6 @@ class ExplainModule(nn.Module):
         mask_activation_func="sigmoid",
         use_sigmoid=True,
         mask_bias=False,
-        graph_idx=0,
-        graph_mode=False,
         gpu=False,
     ):
         super(ExplainModule, self).__init__()
@@ -38,12 +36,10 @@ class ExplainModule(nn.Module):
         self.x = x
         self.model = model
         self.label = label
-        self.graph_idx = graph_idx
         self.gpu = gpu
         self.mask_bias = mask_bias
         self.mask_act = mask_activation_func
         self.use_sigmoid = use_sigmoid
-        self.graph_mode = graph_mode
 
         init_strategy = "normal"
         num_nodes = adj.size()[1]
@@ -172,11 +168,8 @@ class ExplainModule(nn.Module):
                     x = x * feat_mask
 
         ypred, adj_att = self.model(x, self.masked_adj)
-        if self.graph_mode:
-            res = nn.Softmax(dim=0)(ypred[0])
-        else:
-            node_pred = ypred[self.graph_idx, node_idx, :]
-            res = nn.Softmax(dim=0)(node_pred)
+        node_pred = ypred[node_idx, :]
+        res = nn.Softmax(dim=0)(node_pred)
         return res, adj_att
 
     def adj_feat_grad(self, node_idx, pred_label_node):
@@ -192,10 +185,7 @@ class ExplainModule(nn.Module):
         else:
             x, adj = self.x, self.adj
         ypred, _ = self.model(x, adj)
-        if self.graph_mode:
-            logit = nn.Softmax(dim=0)(ypred[0])
-        else:
-            logit = nn.Softmax(dim=0)(ypred[self.graph_idx, node_idx, :])
+        logit = nn.Softmax(dim=0)(ypred[node_idx, :])
         logit = logit[pred_label_node]
         loss = -torch.log(logit)
         loss.backward()
@@ -211,7 +201,7 @@ class ExplainModule(nn.Module):
         if mi_obj:
             pred_loss = -torch.sum(pred * torch.log(pred))
         else:
-            gt_label_node = self.label if self.graph_mode else self.label[0][node_idx]
+            gt_label_node = self.label[0][node_idx]
             logit = pred[gt_label_node]
             pred_loss = -torch.log(logit)
 
@@ -233,20 +223,17 @@ class ExplainModule(nn.Module):
 
         # laplacian
         D = torch.diag(torch.sum(self.masked_adj[0], 0))
-        m_adj = self.masked_adj if self.graph_mode else self.masked_adj[self.graph_idx]
+        m_adj = self.masked_adj
         L = D - m_adj
         pred_label_t = torch.tensor(pred_label, dtype=torch.float)
         if self.gpu:
             pred_label_t = pred_label_t.cuda()
             L = L.cuda()
-        if self.graph_mode:
-            lap_loss = 0
-        else:
-            lap_loss = (
-                self.coeffs["lap"]
-                * (pred_label_t @ L @ pred_label_t)
-                / self.adj.numel()
-            )
+        lap_loss = (
+            self.coeffs["lap"]
+            * (pred_label_t @ L @ pred_label_t)
+            / self.adj.numel()
+        )
 
         loss = pred_loss + size_loss + lap_loss + mask_ent_loss + feat_size_loss
         return loss

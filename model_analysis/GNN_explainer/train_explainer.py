@@ -17,10 +17,6 @@ def extract_neighborhood(node_idx, adj, feat, labels, neighborhoods):
     sub_feat = feat[neighbors]
     sub_label = labels[neighbors]
 
-    sub_label = np.expand_dims(sub_label, axis=0)
-    sub_adj = np.expand_dims(sub_adj, axis=0)
-    sub_feat = np.expand_dims(sub_feat, axis=0)
-
     adj = torch.tensor(sub_adj, dtype=torch.float)
     x = torch.tensor(sub_feat, requires_grad=True, dtype=torch.float)
     label = torch.tensor(sub_label, dtype=torch.long)
@@ -109,9 +105,11 @@ def main(
 ):
     neighborhoods = load_neighborhoods(adj, n_hops=num_gc_layers)
     for node_idx in node_indices:
-        adj, x, label, node_idx_new, neighbors = extract_neighborhood(
+        neighbours_adj, x, label, node_idx_new, neighbors = extract_neighborhood(
             node_idx, adj, feat, labels, neighborhoods
         )
         pred_label = predictions[neighbors]
-        explainer = train_explainer(x, adj, model, label, node_idx_new, pred_label)
+        explainer = train_explainer(
+            x, neighbours_adj, model, label, node_idx_new, pred_label
+        )
         save_explanations(explainer, node_idx)
