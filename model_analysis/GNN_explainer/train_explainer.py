@@ -17,11 +17,7 @@ def extract_neighborhood(node_idx, adj, feat, labels, neighborhoods):
     sub_feat = feat[neighbors]
     sub_label = labels[neighbors]
 
-    adj = torch.tensor(sub_adj, dtype=torch.float)
-    x = torch.tensor(sub_feat, requires_grad=True, dtype=torch.float)
-    label = torch.tensor(sub_label, dtype=torch.long)
-
-    return adj, x, label, node_idx_new, neighbors
+    return sub_adj, sub_feat, sub_label, node_idx_new, neighbors
 
 
 def _build_explainer(x, adj, model, label) -> ExplainModule:
