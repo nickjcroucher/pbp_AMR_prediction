@@ -148,9 +148,7 @@ class ExplainModule(nn.Module):
 
         if unconstrained:
             sym_mask = torch.sigmoid(self.mask) if self.use_sigmoid else self.mask
-            self.masked_adj = (
-                torch.unsqueeze((sym_mask + sym_mask.t()) / 2, 0) * self.diag_mask
-            )
+            self.masked_adj = (sym_mask + sym_mask.t()) / 2 * self.diag_mask
         else:
             self.masked_adj = self._masked_adj()
             if mask_features:
@@ -167,29 +165,27 @@ class ExplainModule(nn.Module):
                 else:
                     x = x * feat_mask
 
-        ypred, adj_att = self.model(x, self.masked_adj)
-        node_pred = ypred[node_idx, :]
-        res = nn.Softmax(dim=0)(node_pred)
-        return res, adj_att
+        ypred = self.model(x, self.masked_adj)
+        return ypred[node_idx]
 
-    def adj_feat_grad(self, node_idx, pred_label_node):
-        self.model.zero_grad()
-        self.adj.requires_grad = True
-        self.x.requires_grad = True
-        if self.adj.grad is not None:
-            self.adj.grad.zero_()
-            self.x.grad.zero_()
-        if self.gpu:
-            adj = self.adj.cuda()
-            x = self.x.cuda()
-        else:
-            x, adj = self.x, self.adj
-        ypred, _ = self.model(x, adj)
-        logit = nn.Softmax(dim=0)(ypred[node_idx, :])
-        logit = logit[pred_label_node]
-        loss = -torch.log(logit)
-        loss.backward()
-        return self.adj.grad, self.x.grad
+    # def adj_feat_grad(self, node_idx, pred_label_node):
+    #     self.model.zero_grad()
+    #     self.adj.requires_grad = True
+    #     self.x.requires_grad = True
+    #     if self.adj.grad is not None:
+    #         self.adj.grad.zero_()
+    #         self.x.grad.zero_()
+    #     if self.gpu:
+    #         adj = self.adj.cuda()
+    #         x = self.x.cuda()
+    #     else:
+    #         x, adj = self.x, self.adj
+    #     ypred = self.model(x, adj)
+    #     logit = nn.Softmax(dim=0)(ypred[node_idx, :])
+    #     logit = logit[pred_label_node]
+    #     loss = -torch.log(logit)
+    #     loss.backward()
+    #     return self.adj.grad, self.x.grad
 
     def loss(self, pred, pred_label, node_idx):
         """
@@ -197,13 +193,7 @@ class ExplainModule(nn.Module):
             pred: prediction made by current model
             pred_label: the label predicted by the original model.
         """
-        mi_obj = False
-        if mi_obj:
-            pred_loss = -torch.sum(pred * torch.log(pred))
-        else:
-            gt_label_node = self.label[0][node_idx]
-            logit = pred[gt_label_node]
-            pred_loss = -torch.log(logit)
+        pred_loss = torch.subtract(pred, pred_label).square().mean()
 
         if self.mask_act == "sigmoid":
             mask = torch.sigmoid(self.mask)
@@ -222,16 +212,15 @@ class ExplainModule(nn.Module):
         mask_ent_loss = self.coeffs["ent"] * torch.mean(mask_ent)
 
         # laplacian
-        D = torch.diag(torch.sum(self.masked_adj[0], 0))
+        D = torch.diag(self.masked_adj)
         m_adj = self.masked_adj
         L = D - m_adj
-        pred_label_t = torch.tensor(pred_label, dtype=torch.float)
         if self.gpu:
-            pred_label_t = pred_label_t.cuda()
+            pred_label = pred_label.cuda()
             L = L.cuda()
         lap_loss = (
             self.coeffs["lap"]
-            * (pred_label_t @ L @ pred_label_t)
+            * (pred_label.transpose(1, 0) @ L @ pred_label)
             / self.adj.numel()
         )
 

@@ -42,7 +42,7 @@ def _build_explainer(x, adj, model, label) -> ExplainModule:
 
 def train_explainer(
     x,
-    adj,
+    neighbours_adj,
     model,
     label,
     node_idx_new: int,
@@ -54,13 +54,13 @@ def train_explainer(
     Trains the explainer module to predict one node in the graph
     """
 
-    explainer = _build_explainer(x, adj, model, label)
+    explainer = _build_explainer(x, neighbours_adj, model, label)
 
     explainer.train()
     for epoch in range(num_epochs):
         explainer.zero_grad()
         explainer.optimizer.zero_grad()
-        ypred = explainer(node_idx_new, unconstrained=unconstrained)[0]
+        ypred = explainer(node_idx_new, unconstrained=unconstrained)
         loss = explainer.loss(ypred, pred_label, node_idx_new)
         loss.backward()
 
