@@ -7,10 +7,11 @@ from torch.nn.modules.module import Module
 
 
 class GCN_layer(Module):
-    def __init__(self, in_features, out_features, bayesian=False):
+    def __init__(self, in_features, out_features, bayesian=False, sparse_adj=True):
         super(GCN_layer, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
+        self.sparse_adj = sparse_adj
         if bayesian:
             self.lin = BayesianLinear(in_features, out_features)
         else:
@@ -18,7 +19,10 @@ class GCN_layer(Module):
 
     def forward(self, layer_input, adj):
         x = self.lin(layer_input)  # Y = WX^T + B
-        x = torch.sparse.mm(adj, x)
+        if self.sparse_adj:
+            x = torch.sparse.mm(adj, x)
+        else:
+            x = torch.mm(adj, x)
         return x
 
     def __repr__(self):
@@ -53,12 +57,13 @@ class GCN(Module):
         nhid_5,
         nclass,
         dropout,
+        sparse_adj=True,
     ):
         super(GCN, self).__init__()
 
-        self.gc1 = GCN_layer(nfeat, nhid_1)
-        self.gc2 = GCN_layer(nhid_1, nhid_2)
-        self.gc3 = GCN_layer(nhid_2, nhid_3)
+        self.gc1 = GCN_layer(nfeat, nhid_1, sparse_adj=sparse_adj)
+        self.gc2 = GCN_layer(nhid_1, nhid_2, sparse_adj=sparse_adj)
+        self.gc3 = GCN_layer(nhid_2, nhid_3, sparse_adj=sparse_adj)
         self.perc_1 = Perceptron(nhid_3, nhid_4)
         self.perc_2 = Perceptron(nhid_4, nhid_5)
         self.perc_3 = Perceptron(nhid_5, nclass)
