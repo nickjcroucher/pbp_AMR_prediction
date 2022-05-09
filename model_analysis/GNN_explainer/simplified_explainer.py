@@ -193,7 +193,7 @@ class ExplainModule(nn.Module):
             pred: prediction made by current model
             pred_label: the label predicted by the original model.
         """
-        pred_loss = torch.subtract(pred, pred_label).square().mean()
+        pred_loss = torch.abs(pred - self.label[node_idx])
 
         if self.mask_act == "sigmoid":
             mask = torch.sigmoid(self.mask)
@@ -201,7 +201,6 @@ class ExplainModule(nn.Module):
             mask = nn.ReLU()(self.mask)
         size_loss = self.coeffs["size"] * torch.sum(mask)
 
-        # pre_mask_sum = torch.sum(self.feat_mask)
         feat_mask = (
             torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask
         )
@@ -215,12 +214,13 @@ class ExplainModule(nn.Module):
         D = torch.diag(self.masked_adj)
         m_adj = self.masked_adj
         L = D - m_adj
+        pred_label_t = torch.Tensor(pred_label)
         if self.gpu:
             pred_label = pred_label.cuda()
             L = L.cuda()
         lap_loss = (
             self.coeffs["lap"]
-            * (pred_label.transpose(1, 0) @ L @ pred_label)
+            * (pred_label_t.transpose(1, 0) @ L @ pred_label_t)
             / self.adj.numel()
         )
 
