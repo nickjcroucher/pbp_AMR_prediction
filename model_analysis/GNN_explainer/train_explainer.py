@@ -1,3 +1,4 @@
+import tempfile
 from typing import List
 
 import numpy as np
@@ -47,7 +48,7 @@ def train_explainer(
     label,
     node_idx_new: int,
     pred_label: float,
-    num_epochs: int = 1000,
+    num_epochs: int = 500,
     unconstrained: bool = False,
 ) -> ExplainModule:
     """
@@ -56,7 +57,9 @@ def train_explainer(
 
     explainer = _build_explainer(x, neighbours_adj, model, label)
 
+    state_dict_file = tempfile.NamedTemporaryFile()
     explainer.train()
+    losses = []
     for epoch in range(num_epochs):
         explainer.zero_grad()
         explainer.optimizer.zero_grad()
@@ -67,8 +70,13 @@ def train_explainer(
         explainer.optimizer.step()
         if explainer.scheduler is not None:
             explainer.scheduler.step()
-
         mask_density = explainer.mask_density()
+
+        loss_value = explainer.loss(ypred, pred_label, node_idx_new)
+        losses.append(loss_value)
+        if loss[-1] == min(losses):
+            torch.save(explainer.state_dict(), state_dict_file.name)
+
         print(
             "epoch: ",
             epoch,
@@ -79,6 +87,9 @@ def train_explainer(
             "; pred: ",
             ypred,
         )
+
+    optimal_state = torch.load(state_dict_file.name)
+    explainer.load_state_dict(optimal_state)
 
     return explainer
 

@@ -151,23 +151,19 @@ class ExplainModule(nn.Module):
         else:
             self.masked_adj = self._masked_adj()
             if mask_features:
-                x = self._mask_features(marginalize)
+                x = self.mask_features()
         ypred = self.model(x, self.masked_adj)
         return ypred[node_idx]
 
-    def _mask_features(self, marginalize):
+    def mask_features(self):
         x = self.x.cuda() if self.gpu else self.x
         feat_mask = (
             torch.sigmoid(self.feat_mask) if self.use_sigmoid else self.feat_mask
         )
-        if marginalize:
-            std_tensor = torch.ones_like(x, dtype=torch.float) / 2
-            mean_tensor = torch.zeros_like(x, dtype=torch.float) - x
-            z = torch.normal(mean=mean_tensor, std=std_tensor)
-            x = x + z * (1 - feat_mask)
-        else:
-            x = x * feat_mask
-        return x
+        std_tensor = torch.ones_like(x, dtype=torch.float) / 2
+        mean_tensor = torch.zeros_like(x, dtype=torch.float) - x
+        z = torch.normal(mean=mean_tensor, std=std_tensor)
+        return x + z * (1 - feat_mask)
 
     def loss(self, pred, pred_label, node_idx):
         """
