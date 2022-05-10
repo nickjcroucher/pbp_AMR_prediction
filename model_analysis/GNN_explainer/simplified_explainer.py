@@ -168,25 +168,6 @@ class ExplainModule(nn.Module):
         ypred = self.model(x, self.masked_adj)
         return ypred[node_idx]
 
-    # def adj_feat_grad(self, node_idx, pred_label_node):
-    #     self.model.zero_grad()
-    #     self.adj.requires_grad = True
-    #     self.x.requires_grad = True
-    #     if self.adj.grad is not None:
-    #         self.adj.grad.zero_()
-    #         self.x.grad.zero_()
-    #     if self.gpu:
-    #         adj = self.adj.cuda()
-    #         x = self.x.cuda()
-    #     else:
-    #         x, adj = self.x, self.adj
-    #     ypred = self.model(x, adj)
-    #     logit = nn.Softmax(dim=0)(ypred[node_idx, :])
-    #     logit = logit[pred_label_node]
-    #     loss = -torch.log(logit)
-    #     loss.backward()
-    #     return self.adj.grad, self.x.grad
-
     def loss(self, pred, pred_label, node_idx):
         """
         Args:
@@ -214,13 +195,12 @@ class ExplainModule(nn.Module):
         D = torch.diag(self.masked_adj)
         m_adj = self.masked_adj
         L = D - m_adj
-        pred_label_t = torch.Tensor(pred_label)
         if self.gpu:
             pred_label = pred_label.cuda()
             L = L.cuda()
         lap_loss = (
             self.coeffs["lap"]
-            * (pred_label_t.transpose(1, 0) @ L @ pred_label_t)
+            * (pred_label.transpose(1, 0) @ L @ pred_label)
             / self.adj.numel()
         )
 

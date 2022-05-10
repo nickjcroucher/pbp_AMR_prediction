@@ -60,7 +60,7 @@ def train_explainer(
     for epoch in range(num_epochs):
         explainer.zero_grad()
         explainer.optimizer.zero_grad()
-        ypred = explainer(node_idx_new, unconstrained=unconstrained)
+        ypred = explainer(node_idx_new, unconstrained=unconstrained, marginalize=True)
         loss = explainer.loss(ypred, pred_label, node_idx_new)
         loss.backward()
 
@@ -100,6 +100,7 @@ def main(
     node_indices: List[int] = [],
 ):
     neighborhoods = load_neighborhoods(adj, n_hops=num_gc_layers)
+    predictions = predictions.detach()
     for node_idx in node_indices:
         neighbours_adj, x, label, node_idx_new, neighbors = extract_neighborhood(
             node_idx, adj, feat, labels, neighborhoods
