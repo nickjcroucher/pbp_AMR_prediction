@@ -22,11 +22,11 @@ def extract_neighborhood(node_idx, adj, feat, labels, neighborhoods):
 
 def _build_explainer(x, adj, model, label) -> ExplainModule:
     optimiser_params = {
-        "lr": 0.1,
-        "opt_scheduler": None,
-        "opt_decay_step": None,
-        "opt_decay_rate": None,
-        "weight_decay": 0.0,
+        "lr": 0.5,
+        "opt_scheduler": "step",
+        "opt_decay_step": 200,
+        "opt_decay_rate": 0.5,
+        "weight_decay": 0,
     }
     return ExplainModule(
         adj=adj,
@@ -47,7 +47,7 @@ def train_explainer(
     label,
     node_idx_new: int,
     pred_label: float,
-    num_epochs: int = 100,
+    num_epochs: int = 1000,
     unconstrained: bool = False,
 ) -> ExplainModule:
     """
