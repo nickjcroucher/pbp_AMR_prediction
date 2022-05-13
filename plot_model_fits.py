@@ -36,6 +36,33 @@ def plot_metrics(all_metrics: Dict[str, pd.DataFrame], train_pop: str, output_di
         plt.clf()
 
 
+def chapter_figure(
+    metrics: pd.DataFrame, metric_name: str, model: str, output_dir: str, fname: str
+):
+    plt.clf()
+    metrics.rename(columns={"score": metric_name}, inplace=True)
+    metrics = metrics.loc[metrics.Model == model]
+    g = sns.FacetGrid(
+        metrics,
+        col="Test Population 1",
+        margin_titles=True,
+        ylim=[0, 100],
+    )
+    g.map(
+        sns.barplot,
+        "Population",
+        metric_name,
+        order=["Train", "Validate", "Test1", "Test2"],
+        ci=None,
+    )
+    g.fig.subplots_adjust(top=0.9)
+    g.fig.tight_layout()
+
+    os.makedirs(output_dir, exist_ok=True)
+    plt.savefig(os.path.join(output_dir, fname))
+    plt.clf()
+
+
 def process_data(data: List[ResultsContainer]) -> Dict[str, pd.DataFrame]:
 
     all_metrics = {}  # type: ignore
@@ -109,6 +136,9 @@ def load_data(
 
 
 def main():
+    """
+    DEPRECATED
+    """
     populations = ["cdc", "pmen", "maela"]
     inference_methods = ["blosum", "HMM", "HMM_MIC"]
 
@@ -123,4 +153,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    train_pop = "cdc"
+    inference_method = "blosum"
+    model = "elastic_net"
+
+    data = load_data(train_pop, inference_method)
+    all_metrics = process_data(data)
+    chapter_figure(
+        all_metrics["mean_acc_per_bin"],
+        "Mean Accuracy per Bin",
+        model,
+        "chapter_figures",
+        f"{model}_{inference_method}_{train_pop}.png",
+    )
