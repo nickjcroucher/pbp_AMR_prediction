@@ -52,6 +52,7 @@ X = data["X"]
 y = data["y"]
 y_np = np.squeeze(y.numpy())
 adj = data["laplacian"] if LAPLACIAN else data["adj"]
+adj = adj.to_dense()
 idx_train, idx_val = data["CV_indices"][:2]
 if TEST_POPULATION_1 is not None:
     idx_test_1, idx_test_2 = data["CV_indices"][2:]
@@ -167,7 +168,7 @@ def train_evaluate(lr: float, model_class: str, **kwargs):
 
     torch.manual_seed(0)
     if model_class == "GCN":
-        model = GCN(X.shape[1], X.shape[1], **kwargs, nclass=1)
+        model = GCN(X.shape[1], X.shape[1], **kwargs, nclass=1, sparse_adj=False)
     elif model_class == "SpGAT":
         model = SpGAT(X.shape[1], **kwargs, nclass=1)
 
@@ -229,7 +230,7 @@ def main(lr: float = 0.001, model_class: str = "GCN") -> Tuple[GCN, pd.DataFrame
 
     torch.manual_seed(0)
     if model_class == "GCN":
-        model = GCN(X.shape[1], X.shape[1], **params, nclass=1)
+        model = GCN(X.shape[1], X.shape[1], **params, nclass=1, sparse_adj=False)
     elif model_class == "SpGAT":
         model = SpGAT(X.shape[1], **params, nclass=1)
 
@@ -251,6 +252,13 @@ def save_results(metrics_df: pd.DataFrame, model_params: Dict, model_state_dict:
         "test_population_1": TEST_POPULATION_1,
         "model_params": model_params,
         "model_state_dict": model_state_dict,
+        "adj": adj,
+        "X": X,
+        "y": y,
+        "idx_train": idx_train,
+        "idx_val": idx_val,
+        "idx_test_1": idx_test_1,
+        "idx_test_2": idx_test_2,
     }
     if HAMMING_DIST_NETWORK:
         network = f"hamming_dist_network_cuttoff_{HD_CUTTOFF}"
