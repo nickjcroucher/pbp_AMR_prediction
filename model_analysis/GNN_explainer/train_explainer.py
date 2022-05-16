@@ -3,9 +3,10 @@ import os
 import pickle
 import tempfile
 from tqdm import tqdm
-from typing import Dict, List
+from typing import List
 
 import numpy as np
+import pandas as pd
 import torch
 
 from parse_GCN_data import load_data
@@ -104,8 +105,14 @@ def train_explainer(
     return explainer
 
 
-def save_explanations(node_explanations: Dict[int, np.ndarray]):
-    ...
+def save_explanations(
+    df: pd.DataFrame,
+    outdir: str,
+    fname: str,
+):
+    os.makedirs(outdir, exist_ok=True)
+    outpath = os.path.join(outdir, fname)
+    df.to_csv(outpath, index=True)
 
 
 def load_model_and_data(
@@ -145,6 +152,7 @@ def load_model_and_data(
     y = data["y"]
     adj = data["laplacian"] if laplacian else data["adj"]
     idx_train = data["CV_indices"][0]
+    node_names = data["node_names"]
 
     adj = adj.to_dense()
     model = GCN(
@@ -152,7 +160,7 @@ def load_model_and_data(
     )
     model.load_state_dict(result["model_state_dict"])
 
-    return X, y, adj, idx_train, model
+    return X, y, adj, idx_train, model, node_names
 
 
 def main(
@@ -193,8 +201,17 @@ def main(
 
 if __name__ == "__main__":
     basepath = "results/phylogeny_GNN_model/hamming_dist_tree/"
+    outdir = os.path.join(basepath, "feature_importance")
     for filename in os.listdir(basepath):
-        X, y, adj, idx_train, model = load_model_and_data(filename)
+        X, y, adj, idx_train, model, node_names = load_model_and_data(filename)
         node_explanations = main(
             model, adj, X, y, num_gc_layers=3, node_indices=idx_train
+        )
+        df = pd.DataFrame(
+            np.stack(list(node_explanations.values())), index=node_names[idx_train]
+        )
+        save_explanations(
+            df,
+            outdir,
+            filename.replace("GNN_", "important_features_").replace(".pkl", ".csv"),
         )
