@@ -71,6 +71,7 @@ def chapter_figure(
         row="Test Population 1",
         kind="bar",
         color="#2b7bba" if comparison_inference_method is None else None,
+        order=["Train", "Validate", "Test1", "Test2"],
     )
     g.set(ylim=[0, 100])
     if comparison_inference_method is not None:
@@ -179,7 +180,7 @@ def main():
 
 if __name__ == "__main__":
     train_pop = "cdc"
-    inference_method = "blosum_inferred"
+    inference_method = "HMM_MIC_inferred"
     model = "elastic_net"
 
     data = load_data(train_pop, inference_method)
