@@ -1,7 +1,7 @@
 import os
 import pickle
 from itertools import product
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -37,27 +37,52 @@ def plot_metrics(all_metrics: Dict[str, pd.DataFrame], train_pop: str, output_di
 
 
 def chapter_figure(
-    metrics: pd.DataFrame, metric_name: str, model: str, output_dir: str, fname: str
+    metrics: pd.DataFrame,
+    model: str,
+    output_dir: str,
+    inference_method: str,
+    train_pop: str,
+    comparison_inference_method: Optional[str] = None,
 ):
+    if comparison_inference_method is not None:
+        data = load_data(train_pop, comparison_inference_method)
+        comparison_metrics = process_data(data)["mean_acc_per_bin"]
+        comparison_metrics = comparison_metrics.assign(
+            **{"Inference Method": comparison_inference_method}
+        )
+        metrics = metrics.assign(**{"Inference Method": inference_method})
+        metrics = pd.concat((metrics, comparison_metrics), ignore_index=True)
+        metrics = metrics.assign(
+            **{
+                "Inference Method": metrics["Inference Method"]
+                .str.replace("_", " ")
+                .str.capitalize()
+            }
+        )
+
     plt.clf()
-    metrics.rename(columns={"score": metric_name}, inplace=True)
+    metrics = metrics.rename(columns={"score": "Mean Accuracy per Bin"})
     metrics = metrics.loc[metrics.Model == model]
-    g = sns.FacetGrid(
-        metrics,
-        col="Test Population 1",
-        margin_titles=True,
-        ylim=[0, 100],
+    g = sns.catplot(
+        data=metrics,
+        x="Population",
+        y="Mean Accuracy per Bin",
+        hue="Inference Method" if comparison_inference_method is not None else None,
+        row="Test Population 1",
+        kind="bar",
+        color="#2b7bba" if comparison_inference_method is None else None,
     )
-    g.map(
-        sns.barplot,
-        "Population",
-        metric_name,
-        order=["Train", "Validate", "Test1", "Test2"],
-        ci=None,
-    )
-    g.fig.subplots_adjust(top=0.9)
+    g.set(ylim=[0, 100])
+    if comparison_inference_method is not None:
+        g.legend.remove()
+    g.fig.subplots_adjust(bottom=0.05, left=0.3)
     g.fig.tight_layout()
 
+    if comparison_inference_method is None:
+        middle = inference_method
+    else:
+        middle = f"{inference_method}_{comparison_inference_method}"
+    fname = f"{model}_{middle}_{train_pop}.png"
     os.makedirs(output_dir, exist_ok=True)
     plt.savefig(os.path.join(output_dir, fname))
     plt.clf()
@@ -119,11 +144,11 @@ def load_data(
     all_data = []
     for model in models:
         if just_hmm_scores:
-            file_path_1 = f"{model}/just_HMM_scores/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types.pkl"  # noqa: E501
-            file_path_2 = f"{model}/just_HMM_scores/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types(1).pkl"  # noqa: E501
+            file_path_1 = f"{model}/just_HMM_scores/train_pop_{train_pop}_results_{inference_method}_pbp_types.pkl"  # noqa: E501
+            file_path_2 = f"{model}/just_HMM_scores/train_pop_{train_pop}_results_{inference_method}_pbp_types(1).pkl"  # noqa: E501
         else:
-            file_path_1 = f"{model}/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types.pkl"  # noqa: E501
-            file_path_2 = f"{model}/train_pop_{train_pop}_results_{inference_method}_inferred_pbp_types(1).pkl"  # noqa: E501
+            file_path_1 = f"{model}/train_pop_{train_pop}_results_{inference_method}_pbp_types.pkl"  # noqa: E501
+            file_path_2 = f"{model}/train_pop_{train_pop}_results_{inference_method}_pbp_types(1).pkl"  # noqa: E501
 
         file_path_1 = os.path.join(root_dir, file_path_1)
         file_path_2 = os.path.join(root_dir, file_path_2)
@@ -140,7 +165,7 @@ def main():
     DEPRECATED
     """
     populations = ["cdc", "pmen", "maela"]
-    inference_methods = ["blosum", "HMM", "HMM_MIC"]
+    inference_methods = ["blosum_inferred", "HMM_inferred", "HMM_MIC_inferred"]
 
     for train_pop, inference_method in product(populations, inference_methods):
         data = load_data(train_pop, inference_method)
@@ -154,15 +179,15 @@ def main():
 
 if __name__ == "__main__":
     train_pop = "cdc"
-    inference_method = "blosum"
+    inference_method = "blosum_inferred"
     model = "elastic_net"
 
     data = load_data(train_pop, inference_method)
     all_metrics = process_data(data)
     chapter_figure(
         all_metrics["mean_acc_per_bin"],
-        "Mean Accuracy per Bin",
         model,
         "chapter_figures",
-        f"{model}_{inference_method}_{train_pop}.png",
+        inference_method,
+        train_pop,
     )
