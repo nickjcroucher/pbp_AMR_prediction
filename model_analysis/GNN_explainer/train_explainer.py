@@ -1,3 +1,4 @@
+import glob
 import logging
 import os
 import pickle
@@ -202,7 +203,8 @@ def main(
 if __name__ == "__main__":
     basepath = "results/phylogeny_GNN_model/hamming_dist_tree/"
     outdir = os.path.join(basepath, "feature_importance")
-    for filename in os.listdir(basepath):
+    for filename in glob.glob(f"{basepath}/*pkl"):
+        filename = os.path.split(filename)[1]
         X, y, adj, idx_train, model, node_names = load_model_and_data(filename)
         node_explanations = main(
             model, adj, X, y, num_gc_layers=3, node_indices=idx_train
