@@ -42,25 +42,32 @@ def chapter_figure(
     output_dir: str,
     inference_method: str,
     train_pop: str,
-    comparison_inference_method: Optional[str] = None,
+    comparison_inference_methods: Optional[List[str]] = None,
 ):
-    if comparison_inference_method is not None:
-        data = load_data(train_pop, comparison_inference_method)
-        comparison_metrics = process_data(data)["mean_acc_per_bin"]
-        comparison_metrics = comparison_metrics.assign(
-            **{"Inference Method": comparison_inference_method}
-        )
-        metrics = metrics.assign(**{"Inference Method": inference_method})
-        metrics = pd.concat((metrics, comparison_metrics), ignore_index=True)
+    metrics = metrics.assign(**{"Inference Method": inference_method})
+    inference_method_renaming_dict = {
+        "blosum_inferred": "BLOSUM inferred",
+        "HMM_MIC_inferred": "HMM MIC inferred",
+        "no_inference": "No Inference",
+    }
+    if comparison_inference_methods is not None:
+        for comparison_inference_method in comparison_inference_methods:
+            data = load_data(train_pop, comparison_inference_method)
+            comparison_metrics = process_data(data)["mean_acc_per_bin"]
+            comparison_metrics = comparison_metrics.assign(
+                **{"Inference Method": comparison_inference_method}
+            )
+            metrics = pd.concat((metrics, comparison_metrics), ignore_index=True)
         metrics = metrics.assign(
             **{
-                "Inference Method": metrics["Inference Method"]
-                .str.replace("_", " ")
-                .str.capitalize()
+                "Inference Method": metrics["Inference Method"].apply(
+                    lambda x: inference_method_renaming_dict[x]
+                )
             }
         )
 
     plt.clf()
+    plt.rcParams.update({"font.size": 16})
     metrics = metrics.rename(columns={"score": "Mean Accuracy per Bin"})
     metrics = metrics.loc[metrics.Model == model]
     g = sns.catplot(
@@ -82,7 +89,7 @@ def chapter_figure(
     if comparison_inference_method is None:
         middle = inference_method
     else:
-        middle = f"{inference_method}_{comparison_inference_method}"
+        middle = f"{inference_method}_{'-'.join(comparison_inference_methods)}"
     fname = f"{model}_{middle}_{train_pop}.png"
     os.makedirs(output_dir, exist_ok=True)
     plt.savefig(os.path.join(output_dir, fname))
@@ -180,7 +187,7 @@ def main():
 
 if __name__ == "__main__":
     train_pop = "cdc"
-    inference_method = "HMM_MIC_inferred"
+    inference_method = "blosum_inferred"
     model = "elastic_net"
 
     data = load_data(train_pop, inference_method)
@@ -191,4 +198,5 @@ if __name__ == "__main__":
         "chapter_figures",
         inference_method,
         train_pop,
+        ["no_inference", "HMM_MIC_inferred"],
     )
