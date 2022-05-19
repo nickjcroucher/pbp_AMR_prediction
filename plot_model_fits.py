@@ -11,6 +11,9 @@ from utils import ResultsContainer
 
 
 def plot_metrics(all_metrics: Dict[str, pd.DataFrame], train_pop: str, output_dir: str):
+    """
+    DEPRECATED
+    """
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
     for metric, metric_data in all_metrics.items():
@@ -75,16 +78,16 @@ def chapter_figure(
         x="Population",
         y="Mean Accuracy per Bin",
         hue="Inference Method" if comparison_inference_method is not None else None,
-        row="Test Population 1",
+        col="Test Population 1",
         kind="bar",
         color="#2b7bba" if comparison_inference_method is None else None,
         order=["Train", "Validate", "Test1", "Test2"],
     )
     g.set(ylim=[0, 100])
-    if comparison_inference_method is not None:
-        g.legend.remove()
-    g.fig.subplots_adjust(bottom=0.05, left=0.3)
-    g.fig.tight_layout()
+    # if comparison_inference_method is not None:
+    # g.legend.remove()
+    # g.fig.subplots_adjust(bottom=0.05, left=0.3)
+    # g.fig.tight_layout()
 
     if comparison_inference_method is None:
         middle = inference_method

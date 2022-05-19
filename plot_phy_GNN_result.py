@@ -113,11 +113,18 @@ def plot_metric(all_results: pd.DataFrame, metric: str = "mean_acc_per_bin"):
 
 
 def single_pop_plot_metric(
-    all_results: pd.DataFrame, metric: str = "mean_acc_per_bin", pop: str = "cdc"
+    all_results: pd.DataFrame,
+    metric: str = "mean_acc_per_bin",
+    ylab: str = "Mean Accuracy per Bin",
+    pop: str = "cdc",
+    hue_order=None,
+    palette=None,
+    main_title=False,
 ):
     results = all_results.loc[
         (all_results.metric == metric) & (all_results["Train Population"] == pop)
     ]
+    results = results.rename(columns={"score": ylab})
     plt.clf()
     g = sns.FacetGrid(
         results,
@@ -126,15 +133,16 @@ def single_pop_plot_metric(
     g.map(
         sns.barplot,
         "Population",
-        "score",
+        ylab,
         "Model",
-        hue_order=["GNN", "random_forest"],
+        hue_order=hue_order,
         order=["Train", "Validate", "Test1", "Test2"],
-        palette=sns.color_palette(["tab:blue", "tab:orange"]),
+        palette=sns.color_palette(palette),
     )
     g.add_legend()
-    g.fig.subplots_adjust(top=0.8)
-    g.fig.suptitle(f"Models Trained on {pop.upper()}")
+    if main_title:
+        g.fig.subplots_adjust(top=0.8)
+        g.fig.suptitle(f"Models Trained on {pop.upper()}")
 
 
 if __name__ == "__main__":
@@ -142,5 +150,10 @@ if __name__ == "__main__":
     other_model_results = load_other_results(inference_method="no_inference")
     all_results = pd.concat([GNN_results, other_model_results])
     for train_pop in all_results["Train Population"].drop_duplicates():
-        single_pop_plot_metric(all_results, pop=train_pop)
+        single_pop_plot_metric(
+            all_results,
+            pop=train_pop,
+            hue_order=["GNN", "random_forest"],
+            palette=["tab:blue", "tab:orange"],
+        )
         plt.savefig(f"GNN_vs_RF_train_pop_{train_pop}.png")
