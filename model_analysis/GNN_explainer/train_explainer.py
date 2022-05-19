@@ -117,7 +117,9 @@ def save_explanations(
 
 
 def load_model_and_data(
-    filename: str, basepath: str = "results/phylogeny_GNN_model/hamming_dist_tree/"
+    filename: str,
+    basepath: str = "results/phylogeny_GNN_model/hamming_dist_tree/",
+    population: str = "train",
 ):
     fpath = os.path.join(basepath, filename)
     with open(fpath, "rb") as a:
@@ -152,7 +154,18 @@ def load_model_and_data(
     X = data["X"]
     y = data["y"]
     adj = data["laplacian"] if laplacian else data["adj"]
-    idx_train = data["CV_indices"][0]
+    if population == "train":
+        idx = data["CV_indices"][0]
+    elif population == "test1":
+        idx = data["CV_indices"][2]
+    elif population == "test2":
+        idx = data["CV_indices"][3]
+    else:
+        raise ValueError(
+            f"""Unknown population: {population}
+            Should be train, test1, or test2
+            """
+        )
     node_names = data["node_names"]
 
     adj = adj.to_dense()
@@ -161,7 +174,7 @@ def load_model_and_data(
     )
     model.load_state_dict(result["model_state_dict"])
 
-    return X, y, adj, idx_train, model, node_names
+    return X, y, adj, idx, model, node_names
 
 
 def main(
@@ -203,17 +216,20 @@ def main(
 if __name__ == "__main__":
     basepath = "results/phylogeny_GNN_model/hamming_dist_tree/"
     outdir = os.path.join(basepath, "feature_importance")
+    population = "train"
     for filename in glob.glob(f"{basepath}/*pkl"):
         filename = os.path.split(filename)[1]
-        X, y, adj, idx_train, model, node_names = load_model_and_data(filename)
-        node_explanations = main(
-            model, adj, X, y, num_gc_layers=3, node_indices=idx_train
+        X, y, adj, idx, model, node_names = load_model_and_data(
+            filename, population=population
         )
+        node_explanations = main(model, adj, X, y, num_gc_layers=3, node_indices=idx)
         df = pd.DataFrame(
-            np.stack(list(node_explanations.values())), index=node_names[idx_train]
+            np.stack(list(node_explanations.values())), index=node_names[idx]
         )
         save_explanations(
             df,
             outdir,
-            filename.replace("GNN_", "important_features_").replace(".pkl", ".csv"),
+            filename.replace("GNN_", f"{population}_important_features_").replace(
+                ".pkl", ".csv"
+            ),
         )
