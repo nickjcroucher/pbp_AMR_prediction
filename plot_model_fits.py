@@ -39,7 +39,37 @@ def plot_metrics(all_metrics: Dict[str, pd.DataFrame], train_pop: str, output_di
         plt.clf()
 
 
-def chapter_figure(
+def chapter_figure_model_comparison(
+    metrics: pd.DataFrame,
+    models: str,
+    output_dir: str,
+    inference_method: str,
+    train_pop: str,
+):
+    metrics = metrics.copy()
+    metrics.loc[metrics.Model == "lasso", "Model"] = "LASSO Interaction Model"
+    metrics.loc[metrics.Model == "random_forest", "Model"] = "Random Forest"
+    metrics = metrics.loc[metrics.Model.isin(models)]
+    plt.clf()
+    plt.rcParams.update({"font.size": 16})
+    metrics = metrics.rename(columns={"score": "Mean Accuracy per Bin"})
+    g = sns.catplot(
+        data=metrics,
+        x="Population",
+        y="Mean Accuracy per Bin",
+        hue="Model",
+        col="Test Population 1",
+        kind="bar",
+        order=["Train", "Validate", "Test1", "Test2"],
+    )
+    g.set(ylim=[0, 100])
+    fname = f"{'-'.join(models)}_{inference_method}_{train_pop}.png"
+    os.makedirs(output_dir, exist_ok=True)
+    plt.savefig(os.path.join(output_dir, fname))
+    plt.clf()
+
+
+def chapter_figure_inference_comparison(
     metrics: pd.DataFrame,
     model: str,
     output_dir: str,
@@ -150,7 +180,13 @@ def load_data(
     inference_method: str,
     root_dir: str = "results",
     just_hmm_scores: bool = False,
-    models=["random_forest", "DBSCAN", "DBSCAN_with_UMAP", "elastic_net"],
+    models=[
+        "random_forest",
+        "DBSCAN",
+        "DBSCAN_with_UMAP",
+        "elastic_net",
+        "interaction_models",
+    ],
 ) -> List[ResultsContainer]:
     all_data = []
     for model in models:
@@ -195,11 +231,18 @@ if __name__ == "__main__":
 
     data = load_data(train_pop, inference_method)
     all_metrics = process_data(data)
-    chapter_figure(
+    chapter_figure_inference_comparison(
         all_metrics["mean_acc_per_bin"],
         model,
         "chapter_figures",
         inference_method,
         train_pop,
         ["no_inference", "HMM_MIC_inferred"],
+    )
+    chapter_figure_model_comparison(
+        all_metrics["mean_acc_per_bin"],
+        ["Random Forest", "LASSO Interaction Model"],
+        "chapter_figures",
+        inference_method,
+        train_pop,
     )

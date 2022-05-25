@@ -35,9 +35,7 @@ def plot_feature_importances(model: RandomForestRegressor):
 
     # map each feature (SNP) to locus
     loci_mapper = {i: ceil((i + 1) / 20) for i in feature_idx}
-    df = pd.DataFrame(
-        {"feature_idx": feature_idx, "feature_scores": feature_scores}
-    )
+    df = pd.DataFrame({"feature_idx": feature_idx, "feature_scores": feature_scores})
     df["locus"] = df.feature_idx.apply(lambda x: loci_mapper[x])
 
     all_feature_scores = np.zeros(sum((a1_length, b2_length, x2_length)))
@@ -54,21 +52,15 @@ def plot_feature_importances(model: RandomForestRegressor):
     ]
 
     a1_feature_scores = relative_feature_scores[:a1_length]
-    b2_feature_scores = relative_feature_scores[
-        a1_length : (a1_length + b2_length)
-    ]
+    b2_feature_scores = relative_feature_scores[a1_length : (a1_length + b2_length)]
     x2_feature_scores = relative_feature_scores[(a1_length + b2_length) :]
 
 
 def bonferroni_correction(
     p_values: List[Tuple[Tuple[int], float]]
 ) -> List[Tuple[Tuple[int], float]]:
-    corrected_p_values = multipletests(
-        [i[1] for i in p_values], method="bonferroni"
-    )[1]
-    p_values = [
-        (p_values[i][0], corrected_p_values[i]) for i in range(len(p_values))
-    ]
+    corrected_p_values = multipletests([i[1] for i in p_values], method="bonferroni")[1]
+    p_values = [(p_values[i][0], corrected_p_values[i]) for i in range(len(p_values))]
     return p_values
 
 
@@ -107,9 +99,9 @@ def paired_selection_frequency(
         N_12 = len(df.loc[df[f_1]].loc[df[f_2]])
         N_neither = len(df.loc[~df[f_1]].loc[~df[f_2]])
 
-        p_value = fisher_exact(
-            [[N_12, N_1], [N_2, N_neither]], alternative="greater"
-        )[1]
+        p_value = fisher_exact([[N_12, N_1], [N_2, N_neither]], alternative="greater")[
+            1
+        ]
 
         return (f_1, f_2), p_value
 
@@ -173,20 +165,12 @@ def split_asymmetry(
         node_values = tree.decision_tree.tree_.value.squeeze()
 
         slope_1 = (
-            node_values[
-                tree.decision_tree.tree_.children_left[left_fp_2_loc[0]]
-            ]
-            - node_values[
-                tree.decision_tree.tree_.children_right[left_fp_2_loc[0]]
-            ]
+            node_values[tree.decision_tree.tree_.children_left[left_fp_2_loc[0]]]
+            - node_values[tree.decision_tree.tree_.children_right[left_fp_2_loc[0]]]
         )
         slope_2 = (
-            node_values[
-                tree.decision_tree.tree_.children_left[right_fp_2_loc[0]]
-            ]
-            - node_values[
-                tree.decision_tree.tree_.children_right[right_fp_2_loc[0]]
-            ]
+            node_values[tree.decision_tree.tree_.children_left[right_fp_2_loc[0]]]
+            - node_values[tree.decision_tree.tree_.children_right[right_fp_2_loc[0]]]
         )
 
         return slope_1, slope_2
@@ -221,9 +205,7 @@ def split_asymmetry(
     return ttest_p_values
 
 
-def selection_asymmetry(
-    linked_features: Dict[Tuple[int], List[DecisionTree_]]
-):
+def selection_asymmetry(linked_features: Dict[Tuple[int], List[DecisionTree_]]):
     ...
 
 
@@ -232,26 +214,31 @@ def ensemble_model():
 
 
 def load_model(
-    *, blosum_inferred: bool = True, filtered: bool = False
+    train_pop: str,
+    test_1_pop: str,
+    inference_type: str,
+    results_dir: str = "results/random_forest",
 ) -> RandomForestRegressor:
-    if blosum_inferred == filtered:
-        raise ValueError("One of blosum_inferred or filtered must be true")
+    def _load_result(suffix):
+        rf_file = (
+            f"train_pop_{train_pop}_results_{inference_type}_pbp_types{suffix}.pkl"
+        )
+        with open(os.path.join(results_dir, rf_file), "rb") as a:
+            return pickle.load(a)
 
-    if blosum_inferred:
-        rf_file = "results_blosum_inferred_pbp_types.pkl"
-    elif filtered:
-        rf_file = "results_filtered_pbp_types.pkl"
-
-    results_dir = "results/random_forest"
-
-    with open(os.path.join(results_dir, rf_file), "rb") as a:
-        results = pickle.load(a)
+    results = _load_result("")
+    if results.config["test_1_population"] != test_1_pop:
+        results = _load_result("(1)")
 
     return results.model
 
 
-def main():
-    model = load_model()
+def main(
+    train_pop: str = "cdc",
+    test_1_pop: str = "pmen",
+    inference_type: str = "no_inference",
+):
+    model = load_model(train_pop, test_1_pop, inference_type)
 
     # extract each decision tree from the rf
     trees = [DecisionTree_(dt) for dt in model.estimators_]
@@ -273,8 +260,16 @@ def main():
     paired_sf_p_values = paired_selection_frequency(
         trees, included_features, feature_pairs
     )
-    split_asymmetry_p_values = split_asymmetry(linked_features)
-    selection_asymmetry_p_values = selection_asymmetry(linked_features)
+    with open(
+        f"results/intermediates/{train_pop}/{inference_type}_linked_features_test1_{test_1_pop}.pkl",
+        "wb",
+    ) as a:
+        pickle.dump(linked_features, a)
+    with open(
+        f"results/intermediates/{train_pop}/{inference_type}_paired_sf_p_values_test1_{test_1_pop}.pkl",
+        "wb",
+    ) as a:
+        pickle.dump(paired_sf_p_values, a)
 
 
 if __name__ == "__main__":

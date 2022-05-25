@@ -30,7 +30,8 @@ def get_clusters(fpath: str) -> pd.DataFrame:
 
 
 def plot_MIC_cluster_distribution(df: pd.DataFrame, fname: str):
-    plt.rcParams.update({"font.size": 16})
+    plt.clf()
+    plt.rcParams.update({"font.size": 12})
     g = sns.catplot(
         data=df,
         x="cluster_labels",
@@ -66,8 +67,8 @@ def main():
             "DBSCAN-UMAP",
         ],
     ]
-    df = pd.concat([get_clusters(i[0]).assign(Model= i[1]) for i in result_files])
-    plot_MIC_cluster_distribution(df)
+    df = pd.concat([get_clusters(i[0]).assign(Model=i[1]) for i in result_files])
+    plot_MIC_cluster_distribution(df, "temp.png")
 
 
 if __name__ == "__main__":

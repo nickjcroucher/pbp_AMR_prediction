@@ -35,9 +35,7 @@ def plot_interactions(model: Lasso, interactions: List[Tuple[int, int]]):
     interactions_array = np.array(interactions)
     interacting_loci = interactions_array[non_zero_coef]
     interacting_loci = [sorted(i) for i in interacting_loci]
-    loci = set(
-        [i[0] for i in interacting_loci] + [i[1] for i in interacting_loci]
-    )
+    loci = set([i[0] for i in interacting_loci] + [i[1] for i in interacting_loci])
 
     def get_protein_from_feature_loc(i):
         i = ceil((i + 1) / 20)
@@ -167,17 +165,13 @@ def plot_simulations(n_interactions: int, test_data_mse: int):
 
 def compare_interaction_model_with_rf(results: ResultsContainer):
     model = load_model()
-    testing_data = load_data("pmen", interactions=None, blosum_inference=True)[
-        1
-    ]
+    testing_data = load_data("pmen", interactions=None, blosum_inference=True)[1]
     rf_predictions = model.predict(testing_data[0])
 
     plt.clf()
     sns.kdeplot(testing_data[1], label="Testing Data")
     sns.kdeplot(rf_predictions, label="RF Predictions")
-    sns.kdeplot(
-        results.testing_predictions, label="Interaction Model Predictions"
-    )
+    sns.kdeplot(results.testing_predictions, label="Interaction Model Predictions")
     plt.legend()
     plt.xlabel("Log2(MIC)")
     plt.title("RF vs Lasso Interaction Model")
@@ -196,9 +190,7 @@ def bayesian_linear_model(
     """
     **kwargs are passed to the fitting method of BayesianLinearModel
     """
-    bayesian_lm = BayesianLinearModel(
-        training_features, training_labels.values
-    )
+    bayesian_lm = BayesianLinearModel(training_features, training_labels.values)
     bayesian_lm.fit(**kwargs)
     return bayesian_lm
 
@@ -279,11 +271,7 @@ def main(
     test_data_population_1: str = "pmen",
     test_data_population_2: str = "maela",
     blosum_inference: bool = False,
-    HMM_inference: bool = False,
     HMM_MIC_inference: bool = False,
-    filter_unseen: bool = False,
-    include_HMM_scores: bool = False,
-    just_HMM_scores: bool = False,
     standardise_training_MIC: bool = True,
     standardise_test_and_val_MIC: bool = False,
 ):
@@ -291,9 +279,16 @@ def main(
     model_type = "lasso"
     pbounds = {"alpha": [0.05, 1.95]}
 
+    if blosum_inference:
+        inference_method = "blosum_inferred"
+    elif HMM_MIC_inference:
+        inference_method = "HMM_MIC_inferred"
+    else:
+        inference_method = "no_inference"
+
     logging.info("Loading inferred interaction data")
     with open(
-        f"results/intermediates/{train_data_population}/paired_sf_p_values.pkl",
+        f"results/intermediates/{train_data_population}/{inference_method}_paired_sf_p_values_test1_{test_data_population_1}.pkl",
         "rb",
     ) as a:
         paired_sf_p_values = pickle.load(a)
@@ -306,11 +301,11 @@ def main(
         test_data_population_2,
         interactions=interactions,
         blosum_inference=blosum_inference,
-        HMM_inference=HMM_inference,
+        HMM_inference=False,
         HMM_MIC_inference=HMM_MIC_inference,
-        filter_unseen=filter_unseen,
-        include_HMM_scores=include_HMM_scores,
-        just_HMM_scores=just_HMM_scores,
+        filter_unseen=False,
+        include_HMM_scores=False,
+        just_HMM_scores=False,
         standardise_training_MIC=standardise_training_MIC,
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
     )
@@ -321,9 +316,7 @@ def main(
     val = data["val"]
 
     logging.info("Optimising the model for the test data accuracy")
-    optimizer = optimise_hps(
-        train, test, pbounds, model_type
-    )  # select hps using GP
+    optimizer = optimise_hps(train, test, pbounds, model_type)  # select hps using GP
 
     logging.info(
         f"Fitting model with optimal hyperparameters: {optimizer.max['params']}"  # noqa: E501
@@ -343,22 +336,14 @@ def main(
         testing_predictions_1=test_predictions_1,
         testing_predictions_2=test_predictions_2,
         training_MSE=mean_squared_error(data["train"][1], train_predictions),
-        validation_MSE=mean_squared_error(
-            data["val"][1], validate_predictions
-        ),
-        testing_MSE_1=mean_squared_error(
-            data["test_1"][1], test_predictions_1
-        ),
-        testing_MSE_2=mean_squared_error(
-            data["test_2"][1], test_predictions_2
-        ),
+        validation_MSE=mean_squared_error(data["val"][1], validate_predictions),
+        testing_MSE_1=mean_squared_error(data["test_1"][1], test_predictions_1),
+        testing_MSE_2=mean_squared_error(data["test_2"][1], test_predictions_2),
         training_accuracy=accuracy(train_predictions, data["train"][1]),
         validation_accuracy=accuracy(validate_predictions, data["val"][1]),
         testing_accuracy_1=accuracy(test_predictions_1, data["test_1"][1]),
         testing_accuracy_2=accuracy(test_predictions_2, data["test_2"][1]),
-        training_mean_acc_per_bin=mean_acc_per_bin(
-            train_predictions, data["train"][1]
-        ),
+        training_mean_acc_per_bin=mean_acc_per_bin(train_predictions, data["train"][1]),
         validation_mean_acc_per_bin=mean_acc_per_bin(
             validate_predictions, data["val"][1]
         ),
@@ -373,7 +358,8 @@ def main(
         model=model,
         config={
             "blosum_inference": blosum_inference,
-            "filter_unseen": filter_unseen,
+            "HMM-MIC_inference": HMM_MIC_inference,
+            "filter_unseen": False,
             "standardise_training_MIC": True,
             "train_val_population": data["train"].population,
             "test_1_population": data["test_1"].population,
@@ -383,41 +369,51 @@ def main(
 
     print(results)
 
-    plot_simulations(
-        results.model.sparse_coef_.count_nonzero(), results.testing_MSE
-    )
-    compare_interaction_model_with_rf(results)
-    plot_interactions(results.model, interactions)
+    suffix = ""
+    fname = f"results/interaction_models/train_pop_{train_data_population}_results_{inference_method}_pbp_types{suffix}.pkl"
+    if os.path.isfile(fname):
+        suffix = "(1)"
+        fname = f"results/interaction_models/train_pop_{train_data_population}_results_{inference_method}_pbp_types{suffix}.pkl"
+    if os.path.isfile(fname):
+        raise Exception("Results file already exists")
 
-    # filter the features to get only those which are used in the lasso model
-    training_features = filter_lasso_features(
-        train[0].todense(), results.model
-    )
-    val_features = filter_lasso_features(val[0].todense(), results.model)
-    test_1_features = filter_lasso_features(test[0].todense(), results.model)
-    test_2_features = filter_lasso_features(test_2[0].todense(), results.model)
+    with open(
+        fname,
+        "wb",
+    ) as a:
+        pickle.dump(results, a)
 
-    # fit bayesian model
-    bayesian_lm = bayesian_linear_model(training_features, train[1])
-    bayesian_lm.plot_model_fit()
+    # plot_simulations(results.model.sparse_coef_.count_nonzero(), results.testing_MSE_1)
+    # compare_interaction_model_with_rf(results)
+    # plot_interactions(results.model, interactions)
 
-    # distributional predictions for each dataset
-    train_bayes_predictions = bayesian_lm.predict(training_features)
-    val_bayes_predictions = bayesian_lm.predict(val_features)
-    test_1_bayes_predictions = bayesian_lm.predict(test_1_features)
-    test_2_bayes_predictions = bayesian_lm.predict(test_2_features)
+    # # filter the features to get only those which are used in the lasso model
+    # training_features = filter_lasso_features(train[0].todense(), results.model)
+    # val_features = filter_lasso_features(val[0].todense(), results.model)
+    # test_1_features = filter_lasso_features(test[0].todense(), results.model)
+    # test_2_features = filter_lasso_features(test_2[0].todense(), results.model)
 
-    plot_CI_accuracies(
-        train_bayes_predictions,
-        train[1].values,
-        val_bayes_predictions,
-        val[1].values,
-        test_1_bayes_predictions,
-        test[1].values,
-        test_2_bayes_predictions,
-        test_2[1].values,
-        bayesian_lm.output_dir,
-    )
+    # # fit bayesian model
+    # bayesian_lm = bayesian_linear_model(training_features, train[1])
+    # bayesian_lm.plot_model_fit()
+
+    # # distributional predictions for each dataset
+    # train_bayes_predictions = bayesian_lm.predict(training_features)
+    # val_bayes_predictions = bayesian_lm.predict(val_features)
+    # test_1_bayes_predictions = bayesian_lm.predict(test_1_features)
+    # test_2_bayes_predictions = bayesian_lm.predict(test_2_features)
+
+    # plot_CI_accuracies(
+    #     train_bayes_predictions,
+    #     train[1].values,
+    #     val_bayes_predictions,
+    #     val[1].values,
+    #     test_1_bayes_predictions,
+    #     test[1].values,
+    #     test_2_bayes_predictions,
+    #     test_2[1].values,
+    #     bayesian_lm.output_dir,
+    # )
 
 
 if __name__ == "__main__":

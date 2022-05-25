@@ -156,6 +156,8 @@ def load_model_and_data(
     adj = data["laplacian"] if laplacian else data["adj"]
     if population == "train":
         idx = data["CV_indices"][0]
+    elif population == "val":
+        idx = data["CV_indices"][1]
     elif population == "test1":
         idx = data["CV_indices"][2]
     elif population == "test2":
