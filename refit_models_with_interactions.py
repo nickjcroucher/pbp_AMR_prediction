@@ -4,7 +4,7 @@ import pickle
 from functools import lru_cache
 from math import ceil
 from random import choice
-from typing import List, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,8 +12,9 @@ import pandas as pd
 import seaborn as sns
 from nptyping import NDArray
 from scipy.sparse import csr_matrix
-from sklearn.linear_model import Lasso
+from sklearn.linear_model import Lasso, LinearRegression
 from sklearn.metrics import mean_squared_error
+from tqdm import tqdm
 
 from bayesian_interaction_model import BayesianLinearModel
 from fit_models import fit_model, load_and_format_data, optimise_hps
@@ -86,8 +87,8 @@ def plot_interactions(model: Lasso, interactions: List[Tuple[int, int]]):
 
 
 @lru_cache(maxsize=1)
-def get_included_features():
-    model = load_model()
+def get_included_features(**kwargs):
+    model = load_model(**kwargs)
 
     # extract each decision tree from the rf
     trees = [DecisionTree_(dt) for dt in model.estimators_]
@@ -100,8 +101,8 @@ def get_included_features():
     return included_features
 
 
-def simulate_random_interactions(n: int) -> List[Tuple[int, int]]:
-    included_features = get_included_features()
+def simulate_random_interactions(n: int, **kwargs) -> List[Tuple[int, int]]:
+    included_features = get_included_features(**kwargs)
     feature_pairs: List[Tuple[int, int]] = []
     while len(feature_pairs) < n:
         fp = (choice(included_features), choice(included_features))
@@ -111,36 +112,50 @@ def simulate_random_interactions(n: int) -> List[Tuple[int, int]]:
     return feature_pairs
 
 
-def random_interaction_model_fits(n: int, model_type: str = "lasso") -> float:
+def random_interaction_model_fits(
+    n: int,
+    train: Tuple[csr_matrix, pd.Series],
+    test: Tuple[csr_matrix, pd.Series],
+    load_model_kwargs: Dict,
+    load_data_kwargs: Dict,
+) -> float:
     """
     n: number of interaction terms to simulate
     """
-    interactions = simulate_random_interactions(n)
+    interactions = simulate_random_interactions(n, **load_model_kwargs)
 
-    train, test, _ = load_data(
-        "pmen", blosum_inference=True, interactions=tuple(interactions)
-    )
+    data = load_and_format_data(interactions=interactions, **load_data_kwargs)
+    train, test = [data[k] for k in ["train", "test_1"]]
 
-    # just interaction terms
-    train = (csr_matrix(train[0].todense()[:, -len(interactions) :]), train[1])
-    test = (csr_matrix(test[0].todense()[:, -len(interactions) :]), test[1])
-
-    model = fit_model(train, model_type, alpha=0.05)
+    model = LinearRegression().fit(train[0], train[1])
     test_predictions = model.predict(test[0])
 
-    MSE = mean_squared_error(test[1], test_predictions)
-    return MSE
+    return mean_squared_error(test[1], test_predictions)
 
 
-def plot_simulations(n_interactions: int, test_data_mse: int):
+def plot_simulations(
+    n_interactions: int,
+    test_data_mse: int,
+    train: Tuple[csr_matrix, pd.Series],
+    test: Tuple[csr_matrix, pd.Series],
+    load_model_kwargs: Dict,
+    load_data_kwargs: Dict,
+):
     random_interaction_MSEs = [
-        random_interaction_model_fits(n_interactions) for i in range(100)
+        random_interaction_model_fits(
+            n_interactions,
+            train,
+            test,
+            load_model_kwargs=load_model_kwargs,
+            load_data_kwargs=load_data_kwargs,
+        )
+        for i in tqdm(range(100), desc="Running random interaction models")
     ]
 
     plt.clf()
     sns.displot(random_interaction_MSEs)
     plt.title("Histogram of MSE of model fitted to random interactions")
-    plt.xlabel("MSE of lasso model")
+    plt.xlabel("MSE of LASSO model")
     plt.axvline(test_data_mse, dashes=(1, 1))
     plt.tight_layout()
     plt.savefig("histogram_simulated_interactions.png")
@@ -148,7 +163,7 @@ def plot_simulations(n_interactions: int, test_data_mse: int):
     plt.clf()
     sns.displot(random_interaction_MSEs, kind="kde")
     plt.title("Kernel Density Estimation of the PDF")
-    plt.xlabel("MSE of lasso model")
+    plt.xlabel("MSE of LASSO model")
     plt.axvline(test_data_mse, dashes=(1, 1))
     plt.tight_layout()
     plt.savefig("KDE_simulated_interactions.png")
@@ -383,9 +398,35 @@ def main(
     ) as a:
         pickle.dump(results, a)
 
-    # plot_simulations(results.model.sparse_coef_.count_nonzero(), results.testing_MSE_1)
+    load_model_kwargs = {
+        "train_pop": train_data_population,
+        "test_1_pop": test_data_population_1,
+        "inference_type": inference_method,
+    }
+    load_data_kwargs = {
+        "train_data_population": train_data_population,
+        "test_data_population_1": test_data_population_1,
+        "test_data_population_2": test_data_population_2,
+        "blosum_inference": blosum_inference,
+        "HMM_inference": False,
+        "HMM_MIC_inference": HMM_MIC_inference,
+        "filter_unseen": False,
+        "include_HMM_scores": False,
+        "just_HMM_scores": False,
+        "standardise_training_MIC": standardise_training_MIC,
+        "standardise_test_and_val_MIC": standardise_test_and_val_MIC,
+    }
+
+    plot_simulations(
+        results.model.sparse_coef_.count_nonzero(),
+        results.testing_MSE_1,
+        train,
+        test,
+        load_model_kwargs=load_model_kwargs,
+        load_data_kwargs=load_data_kwargs,
+    )
     # compare_interaction_model_with_rf(results)
-    # plot_interactions(results.model, interactions)
+    plot_interactions(results.model, interactions)
 
     # # filter the features to get only those which are used in the lasso model
     # training_features = filter_lasso_features(train[0].todense(), results.model)
