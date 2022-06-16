@@ -32,9 +32,15 @@ def load_explanations(
     }
 
 
-def standardise_explanations(explanations: pd.DataFrame):
+def standardise_explanations(
+    explanations: pd.DataFrame, log: bool = True
+) -> pd.DataFrame:
     df = explanations / explanations.max().max()
-    return df.apply(np.reciprocal)
+    df = df.apply(np.reciprocal)
+    if log:
+        return df.apply(np.log10)
+    else:
+        return df
 
 
 def mask_importances(features: pd.Series) -> pd.Series:

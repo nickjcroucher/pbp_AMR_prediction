@@ -119,13 +119,10 @@ def random_interaction_model_fits(
     load_model_kwargs: Dict,
     load_data_kwargs: Dict,
 ) -> float:
-    """
-    n: number of interaction terms to simulate
-    """
     interactions = simulate_random_interactions(n, **load_model_kwargs)
 
     data = load_and_format_data(interactions=interactions, **load_data_kwargs)
-    train, test = [data[k] for k in ["train", "test_1"]]
+    train, test = [data[k] for k in ["train", "val"]]
 
     model = LinearRegression().fit(train[0], train[1])
     test_predictions = model.predict(test[0])
@@ -154,7 +151,7 @@ def plot_simulations(
 
     plt.clf()
     sns.displot(random_interaction_MSEs)
-    plt.title("Histogram of MSE of model fitted to random interactions")
+    plt.title("MSE Distribution of models fitted to random interactions")
     plt.xlabel("MSE of LASSO model")
     plt.axvline(test_data_mse, dashes=(1, 1))
     plt.tight_layout()
@@ -171,7 +168,7 @@ def plot_simulations(
     plt.clf()
     sns.displot(random_interaction_MSEs, kind="ecdf")
     plt.title("Empirical CDF")
-    plt.xlabel("MSE of lasso model")
+    plt.xlabel("MSE of LASSO model")
     plt.axvline(test_data_mse, dashes=(1, 1))
     plt.tight_layout()
     plt.savefig("CDF_simulated_interactions.png")
@@ -392,10 +389,7 @@ def main(
     if os.path.isfile(fname):
         raise Exception("Results file already exists")
 
-    with open(
-        fname,
-        "wb",
-    ) as a:
+    with open(fname, "wb") as a:
         pickle.dump(results, a)
 
     load_model_kwargs = {
