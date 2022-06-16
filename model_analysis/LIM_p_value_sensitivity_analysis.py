@@ -4,6 +4,7 @@ from typing import Dict, List
 
 import matplotlib.pyplot as plt
 import matplotlib_venn
+import pandas as pd
 
 from fit_models import fit_model, load_and_format_data, optimise_hps
 
@@ -17,6 +18,35 @@ def venn_diagram(
     matplotlib_venn.venn3_unweighted(
         feature_sets, set_labels=[f"p value cuttoff = {i}" for i in p_values]
     )
+    plt.savefig(fname)
+
+
+def parallel_coords_plot(
+    fname: str, features_cuttoff_dict: Dict, p_values: List[float] = [0.05, 0.1, 0.15]
+):
+    feature_intersection = set.intersection(
+        *[{i[0] for i in features_cuttoff_dict[p]} for p in p_values]
+    )
+    feature_dicts = [
+        {x[0]: x[1] for x in features_cuttoff_dict[p] if x[0] in feature_intersection}
+        for p in p_values
+    ]
+    feature_dicts = [
+        {"-".join([str(i) for i in k]): v for k, v in f_dict.items()}
+        for f_dict in feature_dicts
+    ]
+    df = pd.concat(
+        [pd.DataFrame(feature_dicts[i], index=[j]) for i, j in enumerate(p_values)]
+    )
+    df = df.sort_values(0.05, axis=1, ascending=False)
+    df = df.rename(columns={j: i + 1 for i, j in enumerate(df.columns)})
+    df = df.reset_index().rename(columns={"index": "p-value"})
+
+    plt.clf()
+    pd.plotting.parallel_coordinates(df, "p-value")
+    plt.legend(title="p-value")
+    plt.xlabel("Feature Pair")
+    plt.ylabel("Linear Coefficient")
     plt.savefig(fname)
 
 
@@ -87,5 +117,9 @@ def main(
 
     venn_diagram(
         f"results/intermediates/cdc/sensitivity_analysis/{test_data_population_1}_venn_diagram.png",
+        features_cuttoff_dict,
+    )
+    parallel_coords_plot(
+        f"results/intermediates/cdc/sensitivity_analysis/{test_data_population_1}_parcoords_plot.png",
         features_cuttoff_dict,
     )
