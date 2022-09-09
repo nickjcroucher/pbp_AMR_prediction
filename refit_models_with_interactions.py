@@ -278,6 +278,19 @@ def plot_CI_accuracies(
     plt.savefig(os.path.join(outdir, "model_prediction_accuracies.png"))
 
 
+def combine_datasets(
+    data_1: List[Union[csr_matrix, pd.Series]],
+    data_2: List[Union[csr_matrix, pd.Series]],
+) -> List[Union[csr_matrix, pd.Series]]:
+    assert (data_1[1] == data_2[1]).all(), "labels do not match"
+
+    features_1 = data_1[0].todense()
+    features_2 = data_2[0].todense()
+    combined_features = csr_matrix(np.concatenate((features_1, features_2), axis=1))
+
+    return [combined_features, data_1[1]]
+
+
 def main(
     train_data_population: str = "cdc",
     test_data_population_1: str = "pmen",
@@ -286,6 +299,7 @@ def main(
     HMM_MIC_inference: bool = False,
     standardise_training_MIC: bool = True,
     standardise_test_and_val_MIC: bool = False,
+    retain_full_sequences: bool = False,
 ):
 
     model_type = "lasso"
@@ -321,6 +335,24 @@ def main(
         standardise_training_MIC=standardise_training_MIC,
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
     )
+
+    if retain_full_sequences:
+        data2 = load_and_format_data(
+            train_data_population,
+            test_data_population_1,
+            test_data_population_2,
+            interactions=None,
+            blosum_inference=blosum_inference,
+            HMM_inference=False,
+            HMM_MIC_inference=HMM_MIC_inference,
+            filter_unseen=False,
+            include_HMM_scores=False,
+            just_HMM_scores=False,
+            standardise_training_MIC=standardise_training_MIC,
+            standardise_test_and_val_MIC=standardise_test_and_val_MIC,
+        )
+        for k in data.keys():
+            data[k] = combine_datasets(data[k], data2[k])
 
     train = data["train"]
     test = data["test_1"]
@@ -373,9 +405,9 @@ def main(
             "HMM-MIC_inference": HMM_MIC_inference,
             "filter_unseen": False,
             "standardise_training_MIC": True,
-            "train_val_population": data["train"].population,
-            "test_1_population": data["test_1"].population,
-            "test_2_population": data["test_2"].population,
+            "train_val_population": train_data_population,
+            "test_1_population": test_data_population_1,
+            "test_2_population": test_data_population_2,
         },
     )
 
