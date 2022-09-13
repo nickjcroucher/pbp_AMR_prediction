@@ -155,6 +155,7 @@ def load_and_format_data(
     standardise_test_and_val_MIC: bool = False,
     n_PBP_representatives: int = -1,
     extended_sequences: bool = False,
+    blosum_strictly_non_negative: bool = False,
 ) -> Dict:
 
     # do the standardisation on the whole dataset rather than each split separately
@@ -178,6 +179,7 @@ def load_and_format_data(
             filter_unseen=filter_unseen,
             standardise_training_MIC=standardise_training_MIC,
             standardise_test_and_val_MIC=standardise_test_and_val_MIC,
+            blosum_strictly_non_negative=blosum_strictly_non_negative,
         )
         original_datasets = {"train": train, "test_1": test_1, "val": val}
     else:
@@ -191,6 +193,7 @@ def load_and_format_data(
             filter_unseen=filter_unseen,
             standardise_training_MIC=standardise_training_MIC,
             standardise_test_and_val_MIC=standardise_test_and_val_MIC,
+            blosum_strictly_non_negative=blosum_strictly_non_negative,
         )
         original_datasets = {
             "train": train,
@@ -481,6 +484,7 @@ def main(
     previous_rf_model: str = None,
     extended_sequences: bool = False,
     n_PBP_representatives: int = -1,
+    blosum_strictly_non_negative: bool = False,
 ):
 
     logging.info("Loading data")
@@ -498,6 +502,7 @@ def main(
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
         n_PBP_representatives=n_PBP_representatives,
         extended_sequences=extended_sequences,
+        blosum_strictly_non_negative=blosum_strictly_non_negative,
     )
 
     if randomise_populations:
@@ -590,6 +595,7 @@ def main(
         model_type=model_type,
         model=model,
         config={
+            "blosum_strictly_non_negative": blosum_strictly_non_negative,
             "blosum_inference": blosum_inference,
             "filter_unseen": filter_unseen,
             "hmm_inference": HMM_inference,

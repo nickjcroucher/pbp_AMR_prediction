@@ -45,6 +45,7 @@ def closest_sequence(
     blosum_scores: Dict = None,
     hmm_scores: Dict = None,
     hmm_predictor: ProfileHMMPredictor = None,
+    blosum_strictly_non_negative: bool = False,
 ):
     """
     pbp: the pbp to match
@@ -99,10 +100,18 @@ def closest_sequence(
         else:
             raise ValueError(f"Unknown inference method: {method}")
 
+        closest_AA = AA_comparisons[max(AA_comparisons.keys())]
+        if (
+            method == "blosum"
+            and blosum_strictly_non_negative
+            and blosum_scores[AA][closest_AA] < 0
+        ):
+            return AA
+
         # if multiple AAs had the highest score the one which is returned first
         # will be the one which it found last in the training set. This is
         # effectively random.
-        return AA_comparisons[max(AA_comparisons.keys())]
+        return closest_AA
 
     new_pbp_sequence = [check_amino_acid(j, i) for i, j in enumerate(pbp_sequence)]
     new_pbp_sequence = "".join(new_pbp_sequence)  # type: ignore
@@ -133,6 +142,7 @@ def infer_sequences(
     train_types: Set,
     method: str,
     training_data: pd.DataFrame,
+    blosum_strictly_non_negative: bool = False,
     **all_testing_data: Dict[str, pd.DataFrame],
 ) -> Dict:
 
@@ -166,6 +176,7 @@ def infer_sequences(
                 training_sequence_array=training_sequence_array,
                 method=method,
                 blosum_scores=blosum_scores,
+                blosum_strictly_non_negative=blosum_strictly_non_negative,
             )
 
         elif method == "hmm":
@@ -229,6 +240,7 @@ def _data_processing(
     HMM_MIC_inference: bool,
     filter_unseen: bool,
     train: pd.DataFrame,
+    blosum_strictly_non_negative: bool = False,
     **test_datasets: Dict[str, pd.DataFrame],
 ):
     if standardise_training_MIC:
@@ -248,6 +260,7 @@ def _data_processing(
                 pbp,
                 train_types,
                 method="blosum",
+                blosum_strictly_non_negative=blosum_strictly_non_negative,
                 training_data=train,
                 **test_datasets,
             )
@@ -260,6 +273,7 @@ def _data_processing(
                 train_types,
                 method="hmm",
                 training_data=train,
+                blosum_strictly_non_negative=blosum_strictly_non_negative,
                 **test_datasets,
             )
         # get closest type to all missing in the training data using closest
@@ -271,6 +285,7 @@ def _data_processing(
                 train_types,
                 method="hmm_mic",
                 training_data=train,
+                blosum_strictly_non_negative=blosum_strictly_non_negative,
                 **test_datasets,
             )
 
@@ -294,6 +309,7 @@ def load_data(
     filter_unseen: bool = True,
     standardise_training_MIC: bool = False,
     standardise_test_and_val_MIC: bool = False,
+    blosum_strictly_non_negative: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     if sorted(
@@ -358,6 +374,7 @@ population_2 should be unique and should be either of cdc, maela, or pmen"
         HMM_inference,
         HMM_MIC_inference,
         filter_unseen,
+        blosum_strictly_non_negative=blosum_strictly_non_negative,
         train=train,
         test_1=test_1,
         test_2=test_2,
@@ -373,6 +390,7 @@ def load_extended_sequence_data(
     filter_unseen: bool = True,
     standardise_training_MIC: bool = False,
     standardise_test_and_val_MIC: bool = False,
+    blosum_strictly_non_negative: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     if len([i for i in [blosum_inference, HMM_inference, filter_unseen] if i]) > 1:
@@ -408,6 +426,7 @@ def load_extended_sequence_data(
         HMM_inference,
         HMM_MIC_inference,
         filter_unseen,
+        blosum_strictly_non_negative=blosum_strictly_non_negative,
         train=train,
         test_1=test,
         val=val,
