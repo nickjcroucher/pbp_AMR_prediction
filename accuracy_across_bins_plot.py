@@ -170,16 +170,28 @@ if __name__ == "__main__":
     ]
     df = pd.concat([x for l in accuracy_bins for x in l], ignore_index=True)
 
+    df = df.rename(
+        columns={
+            "accuracy": "Accuracy",
+            "test_population_1": "Test Pop. 1",
+            "data_split": "Population",
+            "median_bin_values": "Bin Median MIC",
+        }
+    )
+    df.loc[df["Test Pop. 1"] == "pmen", "Test Pop. 1"] = "PMEN"
+    df.loc[df["Test Pop. 1"] == "maela", "Test Pop. 1"] = "Maela"
     for model_type in df.model_type.drop_duplicates():
         plt.clf()
+        plt.rcParams.update({"font.size": 12})
         sns.catplot(
             data=df.loc[df.model_type == model_type],
-            x="median_bin_values",
-            y="accuracy",
-            row="data_split",
-            col="test_population_1",
+            x="Bin Median MIC",
+            y="Accuracy",
+            row="Population",
+            col="Test Pop. 1",
             kind="bar",
             color="#1f77b4",
         )
         plt.title(model_type)
+        plt.subplots_adjust(bottom=0.1)
         plt.savefig(f"{model_type}.png")
