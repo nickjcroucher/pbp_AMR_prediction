@@ -156,6 +156,7 @@ def load_and_format_data(
     n_PBP_representatives: int = -1,
     extended_sequences: bool = False,
     blosum_strictly_non_negative: bool = False,
+    maela_correction: bool = False,
 ) -> Dict:
 
     # do the standardisation on the whole dataset rather than each split separately
@@ -180,6 +181,7 @@ def load_and_format_data(
             standardise_training_MIC=standardise_training_MIC,
             standardise_test_and_val_MIC=standardise_test_and_val_MIC,
             blosum_strictly_non_negative=blosum_strictly_non_negative,
+            maela_correction=maela_correction,
         )
         original_datasets = {"train": train, "test_1": test_1, "val": val}
     else:
@@ -194,6 +196,7 @@ def load_and_format_data(
             standardise_training_MIC=standardise_training_MIC,
             standardise_test_and_val_MIC=standardise_test_and_val_MIC,
             blosum_strictly_non_negative=blosum_strictly_non_negative,
+            maela_correction=maela_correction,
         )
         original_datasets = {
             "train": train,
@@ -458,6 +461,18 @@ def parse_args() -> Dict:
         help="Fit model to extended sequences",
     )
     parser.add_argument(
+        "--blosum_strictly_non_negative",
+        action="store_true",
+        default=False,
+        help="",
+    )
+    parser.add_argument(
+        "--maela_correction",
+        action="store_true",
+        default=False,
+        help="Correct the maela <0.6 sequences",
+    )
+    parser.add_argument(
         "--n_PBP_representatives",
         type=int,
         default=-1,
@@ -485,6 +500,7 @@ def main(
     extended_sequences: bool = False,
     n_PBP_representatives: int = -1,
     blosum_strictly_non_negative: bool = False,
+    maela_correction: bool = False,
 ):
 
     logging.info("Loading data")
@@ -503,6 +519,7 @@ def main(
         n_PBP_representatives=n_PBP_representatives,
         extended_sequences=extended_sequences,
         blosum_strictly_non_negative=blosum_strictly_non_negative,
+        maela_correction=maela_correction,
     )
 
     if randomise_populations:
@@ -606,6 +623,7 @@ def main(
             "standardise_test_and_val_MIC": standardise_test_and_val_MIC,
             "previous_rf_model": previous_rf_model,
             "extended_sequences": extended_sequences,
+            "maela_correction": maela_correction,
             "train_val_population": data["train"].population,
             "test_1_population": data["test_1"].population,
             "test_2_population": data["test_2"].population
@@ -620,6 +638,8 @@ def main(
         outdir = f"results/extended_sequences/{model_type}"
     if n_PBP_representatives != -1:
         outdir = f"results/{n_PBP_representatives}_pbp_mic_representative/{model_type}"
+    if maela_correction:
+        outdir = f"results/maela_updated_mic_rerun/{model_type}"
     else:
         outdir = f"results/{model_type}"
     if just_HMM_scores:
@@ -627,7 +647,10 @@ def main(
     elif include_HMM_scores:
         outdir = os.path.join(outdir, "include_HMM_scores")
     if blosum_inference:
-        filename = f"train_pop_{train_data_population}_results_blosum_inferred_pbp_types.pkl"  # noqa: E501
+        if blosum_strictly_non_negative:
+            filename = f"train_pop_{train_data_population}_results_blosum_inferred_strictly_non_negative_pbp_types.pkl"  # noqa: E501
+        else:
+            filename = f"train_pop_{train_data_population}_results_blosum_inferred_pbp_types.pkl"  # noqa: E501
     elif filter_unseen:
         filename = f"train_pop_{train_data_population}_results_filtered_pbp_types.pkl"  # noqa: E501
     elif HMM_inference:

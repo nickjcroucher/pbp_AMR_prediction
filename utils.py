@@ -310,6 +310,7 @@ def load_data(
     standardise_training_MIC: bool = False,
     standardise_test_and_val_MIC: bool = False,
     blosum_strictly_non_negative: bool = False,
+    maela_correction: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     if sorted(
@@ -329,6 +330,9 @@ population_2 should be unique and should be either of cdc, maela, or pmen"
     cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
     pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
     maela = pd.read_csv("../data/pneumo_pbp/maela_aa_df.csv")
+
+    if maela_correction:
+        maela.loc[maela.mic == 0.060, 'mic'] = 0.03
 
     cdc = parse_cdc(cdc, pbp_patterns)
     pmen = parse_pmen_and_maela(pmen, cdc, pbp_patterns)
@@ -391,6 +395,7 @@ def load_extended_sequence_data(
     standardise_training_MIC: bool = False,
     standardise_test_and_val_MIC: bool = False,
     blosum_strictly_non_negative: bool = False,
+    maela_correction: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     if len([i for i in [blosum_inference, HMM_inference, filter_unseen] if i]) > 1:
@@ -401,6 +406,9 @@ def load_extended_sequence_data(
 
     pmen = pd.read_csv("../data/pneumo_pbp/pmen_full_pbp_seqs_mic.csv")
     maela = pd.read_csv("../data/pneumo_pbp/maela_full_pbp_mic.csv")
+
+    if maela_correction:
+        maela.loc[maela.mic == 0.060, 'mic'] = 0.03
 
     if train_data_population == "maela":
         maela = parse_extended_sequences(maela, pbp_patterns)
