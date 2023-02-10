@@ -33,6 +33,7 @@ HD_CUTTOFF = 5
 N = 3
 TRAIN_POPULATION = sys.argv[1]
 TEST_POPULATION_1 = sys.argv[2]
+MAELA_CORRECTION = True
 
 data = load_data(
     filter_constant_features=True,
@@ -47,6 +48,7 @@ data = load_data(
     ranked_hamming_distance=RANK_HAMMING_DISTANCE,
     hd_cuttoff=HD_CUTTOFF,
     n=N,
+    maela_correction=MAELA_CORRECTION,
 )
 X = data["X"]
 y = data["y"]
@@ -274,7 +276,7 @@ def save_results(metrics_df: pd.DataFrame, model_params: Dict, model_state_dict:
         if RANK_HAMMING_DISTANCE:
             network = "ranked_" + network
 
-    target_dir = f"./results/phylogeny_GNN_model/{network}"
+    target_dir = f"./results/maela_updated_mic_rerun/phylogeny_GNN_model/{network}"
     os.makedirs(target_dir, exist_ok=True)
 
     dest = os.path.join(target_dir, f"GNN_{TRAIN_POPULATION}_{TEST_POPULATION_1}.pkl")

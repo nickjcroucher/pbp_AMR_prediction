@@ -76,16 +76,23 @@ def chapter_figure_inference_comparison(
     inference_method: str,
     train_pop: str,
     comparison_inference_methods: Optional[List[str]] = None,
+    maela_correction: bool = False,
 ):
     metrics = metrics.assign(**{"Inference Method": inference_method})
     inference_method_renaming_dict = {
         "blosum_inferred": "BLOSUM inferred",
         "HMM_MIC_inferred": "HMM MIC inferred",
         "no_inference": "No Inference",
+        "blosum_inferred_strictly_non_negative": "NN BLOSUM inferred",
     }
     if comparison_inference_methods is not None:
         for comparison_inference_method in comparison_inference_methods:
-            data = load_data(train_pop, comparison_inference_method)
+            data = load_data(
+                train_pop,
+                comparison_inference_method,
+                models=[model],
+                maela_correction=maela_correction,
+            )
             comparison_metrics = process_data(data)["mean_acc_per_bin"]
             comparison_metrics = comparison_metrics.assign(
                 **{"Inference Method": comparison_inference_method}
@@ -102,7 +109,6 @@ def chapter_figure_inference_comparison(
     plt.clf()
     plt.rcParams.update({"font.size": 16})
     metrics = metrics.rename(columns={"score": "Mean Accuracy per Bin"})
-    metrics = metrics.loc[metrics.Model == model]
     g = sns.catplot(
         data=metrics,
         x="Population",
@@ -129,7 +135,11 @@ def chapter_figure_inference_comparison(
     plt.clf()
 
 
-def process_data(data: List[ResultsContainer]) -> Dict[str, pd.DataFrame]:
+def process_data(
+    data: List[ResultsContainer], annotations: Optional[List[str]] = None
+) -> Dict[str, pd.DataFrame]:
+    if annotations is not None:
+        assert len(data) == len(annotations)
 
     all_metrics = {}  # type: ignore
     for metric in ["accuracy", "MSE", "mean_acc_per_bin"]:
@@ -141,7 +151,10 @@ def process_data(data: List[ResultsContainer]) -> Dict[str, pd.DataFrame]:
             "Test Population 2": [],
             "Model": [],
         }
-        for results in data:
+        if annotations is not None:
+            all_metrics[metric]["annotation"] = []
+
+        for n, results in enumerate(data):
             all_metrics[metric]["score"].append(
                 results.__getattribute__(f"training_{metric}")
             )
@@ -167,6 +180,8 @@ def process_data(data: List[ResultsContainer]) -> Dict[str, pd.DataFrame]:
                 [results.config["test_2_population"]] * 4
             )
             all_metrics[metric]["Model"].extend([results.model_type] * 4)
+            if annotations is not None:
+                all_metrics[metric]["annotation"].extend([annotations[n]] * 4)
 
         df = pd.DataFrame(all_metrics[metric])
         df.sort_values(by="Test Population 2", inplace=True)
@@ -187,7 +202,11 @@ def load_data(
         "elastic_net",
         "interaction_models",
     ],
+    maela_correction: bool = False,
 ) -> List[ResultsContainer]:
+    if maela_correction:
+        root_dir = os.path.join(root_dir, "maela_updated_mic_rerun")
+
     all_data = []
     for model in models:
         if just_hmm_scores:
@@ -229,20 +248,21 @@ if __name__ == "__main__":
     inference_method = "blosum_inferred"
     model = "elastic_net"
 
-    data = load_data(train_pop, inference_method)
-    all_metrics = process_data(data)
+    data = load_data(train_pop, inference_method, models=[model], maela_correction=True)
+    all_metrics = process_data(data, annotations=None)
     chapter_figure_inference_comparison(
         all_metrics["mean_acc_per_bin"],
         model,
-        "chapter_figures",
+        "chapter_figures_maela_correction/",
         inference_method,
         train_pop,
         ["no_inference", "HMM_MIC_inferred"],
+        maela_correction=True
     )
     chapter_figure_model_comparison(
         all_metrics["mean_acc_per_bin"],
         ["Random Forest", "LASSO Interaction Model"],
-        "chapter_figures",
+        "chapter_figures_maela_correction/",
         inference_method,
         train_pop,
     )

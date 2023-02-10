@@ -29,13 +29,17 @@ def tree_to_graph(tree_file: str) -> Tuple[coo_matrix, List]:
 
 
 def load_features(
-    drop_duplicates: bool = False,
+    drop_duplicates: bool = False, maela_correction: bool = False
 ) -> Tuple[np.ndarray, np.ndarray, csr_matrix]:
     pbp_patterns = ["a1", "b2", "x2"]
 
     cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
     pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
     maela = pd.read_csv("../data/pneumo_pbp/maela_aa_df.csv")
+
+    if maela_correction:
+        maela.loc[maela.mic == 0.060, "mic"] = 0.03
+
     cdc = parse_cdc(cdc, pbp_patterns)
     pmen = parse_pmen_and_maela(pmen, cdc, pbp_patterns)
     maela = parse_pmen_and_maela(maela, cdc, pbp_patterns)
@@ -277,6 +281,7 @@ def load_data(
     hd_cuttoff: float = 0.005,
     drop_duplicates: bool = False,
     ranked_hamming_distance: bool = False,
+    maela_correction: bool = False,
     n: int = 3,
 ) -> Dict:
     if (
@@ -285,7 +290,9 @@ def load_data(
     ):
         raise ValueError("One of tree and hamming_dist_network must be True")
 
-    ids, mics, node_features = load_features(drop_duplicates=drop_duplicates)
+    ids, mics, node_features = load_features(
+        drop_duplicates=drop_duplicates, maela_correction=maela_correction
+    )
 
     if tree:
         tree_file = "iqtree/PBP_alignment.fasta.treefile"

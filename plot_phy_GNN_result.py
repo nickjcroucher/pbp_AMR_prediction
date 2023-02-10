@@ -12,7 +12,7 @@ from plot_model_fits import load_data as load_data_, process_data
 
 
 def load_GNN_results(results_dir: str) -> pd.DataFrame:
-    results_files = glob.glob(f"results/phylogeny_GNN_model/hamming_dist_tree/*pkl")
+    results_files = glob.glob(results_dir + "*.pkl")
     results_files = [os.path.split(i)[1] for i in results_files]
     all_results = {
         "train_pop": [],
@@ -146,8 +146,12 @@ def single_pop_plot_metric(
 
 
 if __name__ == "__main__":
-    GNN_results = load_GNN_results("results/phylogeny_GNN_model/hamming_dist_tree")
-    other_model_results = load_other_results(inference_method="no_inference")
+    GNN_results = load_GNN_results(
+        "results/maela_updated_mic_rerun/phylogeny_GNN_model/hamming_dist_tree"
+    )
+    other_model_results = load_other_results(
+        "results/maela_updated_mic_rerun", inference_method="no_inference"
+    )
     all_results = pd.concat([GNN_results, other_model_results])
     for train_pop in all_results["Train Population"].drop_duplicates():
         single_pop_plot_metric(
