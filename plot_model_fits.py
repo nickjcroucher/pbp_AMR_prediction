@@ -256,8 +256,8 @@ if __name__ == "__main__":
         "chapter_figures_maela_correction/",
         inference_method,
         train_pop,
-        ["no_inference", "HMM_MIC_inferred"],
-        maela_correction=True
+        ["no_inference", "HMM_MIC_inferred", "blosum_inferred_strictly_non_negative"],
+        maela_correction=True,
     )
     chapter_figure_model_comparison(
         all_metrics["mean_acc_per_bin"],

@@ -77,13 +77,13 @@ def load_other_results(
     root_dir: str = "results",
     inference_method: str = "HMM_MIC",
     models: List[str] = ["random_forest"],
+    train_populations: List[str] = ["cdc"],
 ) -> pd.DataFrame:
-    populations = ["cdc", "pmen", "maela"]
     all_metrics = [
         process_data(
             load_data_(train_pop, inference_method, root_dir=root_dir, models=models)
         )
-        for train_pop in populations
+        for train_pop in train_populations
     ]
     return pd.concat(
         [pd.concat([v.assign(metric=k) for k, v in i.items()]) for i in all_metrics]
@@ -147,7 +147,7 @@ def single_pop_plot_metric(
 
 if __name__ == "__main__":
     GNN_results = load_GNN_results(
-        "results/maela_updated_mic_rerun/phylogeny_GNN_model/hamming_dist_tree"
+        "results/maela_updated_mic_rerun/phylogeny_GNN_model/hamming_dist_tree/"
     )
     other_model_results = load_other_results(
         "results/maela_updated_mic_rerun", inference_method="no_inference"
