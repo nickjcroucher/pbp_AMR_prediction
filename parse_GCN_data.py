@@ -47,7 +47,7 @@ def load_features(
     cdc, pmen, maela = _data_processing(
         pbp_patterns,
         standardise_training_MIC=True,
-        standardise_test_and_val_MIC=True,
+        standardise_test_and_val_MIC=False,
         blosum_inference=False,
         HMM_inference=False,
         HMM_MIC_inference=False,

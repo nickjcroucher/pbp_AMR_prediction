@@ -205,7 +205,7 @@ def load_and_format_data(
             "val": val,
         }
 
-    if n_PBP_representatives:
+    if n_PBP_representatives > 0:
         df = pd.concat([v.assign(pop=k) for k, v in original_datasets.items()])
         df = standardise_MICs(df)
 

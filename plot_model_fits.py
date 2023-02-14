@@ -49,6 +49,7 @@ def chapter_figure_model_comparison(
     metrics = metrics.copy()
     metrics.loc[metrics.Model == "lasso", "Model"] = "LASSO Interaction Model"
     metrics.loc[metrics.Model == "random_forest", "Model"] = "Random Forest"
+    metrics.loc[metrics.Model == "DBSCAN_with_UMAP", "Model"] = "DBSCAN-UMAP"
     metrics = metrics.loc[metrics.Model.isin(models)]
     plt.clf()
     plt.rcParams.update({"font.size": 16})
