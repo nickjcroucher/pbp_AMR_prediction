@@ -38,7 +38,7 @@ def parallel_coords_plot(
     df = pd.concat(
         [pd.DataFrame(feature_dicts[i], index=[j]) for i, j in enumerate(p_values)]
     )
-    df = df.sort_values(0.05, axis=1, ascending=False)
+    df = df.sort_values(min(p_values), axis=1, ascending=False)
     df = df.rename(columns={j: i + 1 for i, j in enumerate(df.columns)})
     df = df.reset_index().rename(columns={"index": "p-value"})
 
@@ -95,11 +95,12 @@ def main(
 ):
     logging.info("Loading inferred interaction data")
     with open(
-        f"results/intermediates/cdc/no_inference_paired_sf_p_values_test1_{test_data_population_1}.pkl",
+        f"results/intermediates/maela_updated_mic_rerun/cdc/no_inference_paired_sf_p_values_test1_{test_data_population_1}.pkl",
         "rb",
     ) as a:
         paired_sf_p_values = pickle.load(a)
 
+    p_values = [0.1, 0.2, 0.3]
     features_cuttoff_dict = {
         p_value: p_value_cuttoff_tests(
             p_value,
@@ -107,19 +108,21 @@ def main(
             test_data_population_2,
             paired_sf_p_values,
         )
-        for p_value in [0.05, 0.1, 0.15, 0.2, 0.25]
+        for p_value in p_values
     }
     with open(
-        f"results/intermediates/cdc/sensitivity_analysis/inc_features_p_value_cuttoff_{test_data_population_1}.pkl",
+        f"results/intermediates/maela_updated_mic_rerun/cdc/sensitivity_analysis/inc_features_p_value_cuttoff_{test_data_population_1}.pkl",
         "wb",
     ) as a:
         pickle.dump(features_cuttoff_dict, a)
 
     venn_diagram(
-        f"results/intermediates/cdc/sensitivity_analysis/{test_data_population_1}_venn_diagram.png",
+        f"results/intermediates/maela_updated_mic_rerun/cdc/sensitivity_analysis/{test_data_population_1}_venn_diagram2.png",
         features_cuttoff_dict,
+        p_values=p_values,
     )
     parallel_coords_plot(
-        f"results/intermediates/cdc/sensitivity_analysis/{test_data_population_1}_parcoords_plot.png",
+        f"results/intermediates/maela_updated_mic_rerun/cdc/sensitivity_analysis/{test_data_population_1}_parcoords_plot2.png",
         features_cuttoff_dict,
+        p_values=p_values,
     )

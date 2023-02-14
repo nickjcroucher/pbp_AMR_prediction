@@ -238,7 +238,12 @@ def main(
     test_1_pop: str = "pmen",
     inference_type: str = "no_inference",
 ):
-    model = load_model(train_pop, test_1_pop, inference_type)
+    model = load_model(
+        train_pop,
+        test_1_pop,
+        inference_type,
+        "results/maela_updated_mic_rerun/random_forest/",
+    )
 
     # extract each decision tree from the rf
     trees = [DecisionTree_(dt) for dt in model.estimators_]
@@ -261,12 +266,12 @@ def main(
         trees, included_features, feature_pairs
     )
     with open(
-        f"results/intermediates/{train_pop}/{inference_type}_linked_features_test1_{test_1_pop}.pkl",
+        f"results/intermediates/maela_updated_mic_rerun/{train_pop}/{inference_type}_linked_features_test1_{test_1_pop}.pkl",
         "wb",
     ) as a:
         pickle.dump(linked_features, a)
     with open(
-        f"results/intermediates/{train_pop}/{inference_type}_paired_sf_p_values_test1_{test_1_pop}.pkl",
+        f"results/intermediates/maela_updated_mic_rerun/{train_pop}/{inference_type}_paired_sf_p_values_test1_{test_1_pop}.pkl",
         "wb",
     ) as a:
         pickle.dump(paired_sf_p_values, a)

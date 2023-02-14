@@ -314,12 +314,12 @@ def main(
 
     logging.info("Loading inferred interaction data")
     with open(
-        f"results/intermediates/{train_data_population}/{inference_method}_paired_sf_p_values_test1_{test_data_population_1}.pkl",
+        f"results/intermediates/maela_updated_mic_rerun/{train_data_population}/{inference_method}_paired_sf_p_values_test1_{test_data_population_1}.pkl",
         "rb",
     ) as a:
         paired_sf_p_values = pickle.load(a)
 
-    interactions = [i[0] for i in paired_sf_p_values if i[1] < 0.05]
+    interactions = [i[0] for i in paired_sf_p_values if i[1] < 0.1]
 
     data = load_and_format_data(
         train_data_population,
@@ -334,6 +334,7 @@ def main(
         just_HMM_scores=False,
         standardise_training_MIC=standardise_training_MIC,
         standardise_test_and_val_MIC=standardise_test_and_val_MIC,
+        maela_correction=True,
     )
 
     if retain_full_sequences:
@@ -350,6 +351,7 @@ def main(
             just_HMM_scores=False,
             standardise_training_MIC=standardise_training_MIC,
             standardise_test_and_val_MIC=standardise_test_and_val_MIC,
+            maela_correction=True,
         )
         for k in data.keys():
             data[k] = combine_datasets(data[k], data2[k])
@@ -408,16 +410,27 @@ def main(
             "train_val_population": train_data_population,
             "test_1_population": test_data_population_1,
             "test_2_population": test_data_population_2,
+            "maela_correction": True,
         },
     )
 
     print(results)
 
+    base_path = "results/maela_updated_mic_rerun/interaction_models/"
+    if retain_full_sequences:
+        base_path = os.path.join(base_path, "including_all_sequences")
+
     suffix = ""
-    fname = f"results/interaction_models/train_pop_{train_data_population}_results_{inference_method}_pbp_types{suffix}.pkl"
+    fname = os.path.join(
+        base_path,
+        f"train_pop_{train_data_population}_results_{inference_method}_pbp_types{suffix}.pkl",
+    )
     if os.path.isfile(fname):
         suffix = "(1)"
-        fname = f"results/interaction_models/train_pop_{train_data_population}_results_{inference_method}_pbp_types{suffix}.pkl"
+        fname = os.path.join(
+            base_path,
+            f"train_pop_{train_data_population}_results_{inference_method}_pbp_types{suffix}.pkl",
+        )
     if os.path.isfile(fname):
         raise Exception("Results file already exists")
 
