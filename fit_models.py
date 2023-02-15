@@ -485,7 +485,7 @@ def parse_args() -> Dict:
 def main(
     train_data_population: str = "cdc",
     test_data_population_1: str = "pmen",
-    test_data_population_2: Optional[str] = "maela",
+    test_data_population_2: str = "maela",
     randomise_populations: bool = False,
     model_type: str = "random_forest",
     blosum_inference: bool = False,
