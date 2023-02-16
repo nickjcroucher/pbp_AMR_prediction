@@ -41,6 +41,7 @@ def plot_MIC_cluster_distribution(df: pd.DataFrame, fname: str):
         row="Model",
         kind="box",
         sharex=False,
+        color="white",
     )
     g.set_xticklabels([])
     g.set_ylabels("log2(MIC)")
@@ -51,23 +52,25 @@ def plot_MIC_cluster_distribution(df: pd.DataFrame, fname: str):
 def main():
     result_files = [
         [
-            "results/DBSCAN/train_pop_cdc_results_no_inference_pbp_types.pkl",
+            "results/maela_updated_mic_rerun/DBSCAN/train_pop_cdc_results_no_inference_pbp_types.pkl",
             "DBSCAN",
         ],
         [
-            "results/DBSCAN/train_pop_cdc_results_no_inference_pbp_types(1).pkl",
+            "results/maela_updated_mic_rerun/DBSCAN/train_pop_cdc_results_no_inference_pbp_types(1).pkl",
             "DBSCAN",
         ],
         [
-            "results/DBSCAN_with_UMAP/train_pop_cdc_results_no_inference_pbp_types.pkl",
+            "results/maela_updated_mic_rerun/DBSCAN_with_UMAP/train_pop_cdc_results_no_inference_pbp_types.pkl",
             "DBSCAN-UMAP",
         ],
         [
-            "results/DBSCAN_with_UMAP/train_pop_cdc_results_no_inference_pbp_types(1).pkl",
+            "results/maela_updated_mic_rerun/DBSCAN_with_UMAP/train_pop_cdc_results_no_inference_pbp_types(1).pkl",
             "DBSCAN-UMAP",
         ],
     ]
     df = pd.concat([get_clusters(i[0]).assign(Model=i[1]) for i in result_files])
+    df.loc[df["Test Population 1"] == "pmen", "Test Population 1"] = "PMEN"
+    df.loc[df["Test Population 1"] == "maela", "Test Population 1"] = "Maela"
     plot_MIC_cluster_distribution(df, "temp.png")
 
 
