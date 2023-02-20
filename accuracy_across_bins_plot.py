@@ -23,6 +23,7 @@ INPUT_DATA = load_and_format_data(
     just_HMM_scores=False,
     standardise_training_MIC=True,
     standardise_test_and_val_MIC=False,
+    maela_correction=True,
 )
 TRAIN = INPUT_DATA["train"][1].values
 VAL = INPUT_DATA["val"][1].values
@@ -32,21 +33,29 @@ MAELA = INPUT_DATA["test_2"][1].values
 
 files = {
     "Random Forest": {
-        "pmen": "results/random_forest/train_pop_cdc_results_no_inference_pbp_types.pkl",
-        "maela": "results/random_forest/train_pop_cdc_results_no_inference_pbp_types(1).pkl",
+        "pmen": "results/maela_updated_mic_rerun/random_forest/train_pop_cdc_results_no_inference_pbp_types.pkl",
+        "maela": "results/maela_updated_mic_rerun/random_forest/train_pop_cdc_results_no_inference_pbp_types(1).pkl",
     },
     "GNN": {
-        "pmen": "results/phylogeny_GNN_model/hamming_dist_tree/GNN_cdc_pmen.pkl",
-        "maela": "results/phylogeny_GNN_model/hamming_dist_tree/GNN_cdc_maela.pkl",
+        "pmen": "results/maela_updated_mic_rerun/phylogeny_GNN_model/hamming_dist_tree/GNN_cdc_pmen.pkl",
+        "maela": "results/maela_updated_mic_rerun/phylogeny_GNN_model/hamming_dist_tree/GNN_cdc_maela.pkl",
     },
-    "LIM (just interactions)": {
-        "pmen": "results/interaction_models/train_pop_cdc_results_no_inference_pbp_types.pkl",
-        "maela": "results/interaction_models/train_pop_cdc_results_no_inference_pbp_types(1).pkl",
+    "LIM": {
+        "pmen": "results/maela_updated_mic_rerun/interaction_models/train_pop_cdc_results_no_inference_pbp_types.pkl",
+        "maela": "results/maela_updated_mic_rerun/interaction_models/train_pop_cdc_results_no_inference_pbp_types(1).pkl",
     },
-    "LIM (full sequences & interactions)": {
-        "pmen": "results/interaction_models/including_all_sequences/train_pop_cdc_results_no_inference_pbp_types.pkl",
-        "maela": "results/interaction_models/including_all_sequences/train_pop_cdc_results_no_inference_pbp_types(1).pkl",
-    },
+    "DBSCAN-UMAP": {
+        "pmen": "results/maela_updated_mic_rerun/DBSCAN_with_UMAP/train_pop_cdc_results_no_inference_pbp_types.pkl",
+        "maela": "results/maela_updated_mic_rerun/DBSCAN_with_UMAP/train_pop_cdc_results_no_inference_pbp_types(1).pkl",
+    }
+    # "LIM (just interactions)": {
+    #     "pmen": "results/interaction_models/train_pop_cdc_results_no_inference_pbp_types.pkl",
+    #     "maela": "results/interaction_models/train_pop_cdc_results_no_inference_pbp_types(1).pkl",
+    # },
+    # "LIM (full sequences & interactions)": {
+    #     "pmen": "results/interaction_models/including_all_sequences/train_pop_cdc_results_no_inference_pbp_types.pkl",
+    #     "maela": "results/interaction_models/including_all_sequences/train_pop_cdc_results_no_inference_pbp_types(1).pkl",
+    # },
 }
 
 
@@ -180,18 +189,37 @@ if __name__ == "__main__":
     )
     df.loc[df["Test Pop. 1"] == "pmen", "Test Pop. 1"] = "PMEN"
     df.loc[df["Test Pop. 1"] == "maela", "Test Pop. 1"] = "Maela"
-    for model_type in df.model_type.drop_duplicates():
-        plt.clf()
-        plt.rcParams.update({"font.size": 12})
-        sns.catplot(
-            data=df.loc[df.model_type == model_type],
-            x="Bin Median MIC",
-            y="Accuracy",
-            row="Population",
-            col="Test Pop. 1",
-            kind="bar",
-            color="#1f77b4",
-        )
-        plt.title(model_type)
-        plt.subplots_adjust(bottom=0.1)
-        plt.savefig(f"{model_type}.png")
+
+    df = df.loc[df.Population != "Train"]
+    df = df.assign(**{"Model Type": df.model_type})
+
+    plt.clf()
+    plt.rcParams.update({"font.size": 16})
+    sns.catplot(
+        data=df,
+        x="Bin Median MIC",
+        y="Accuracy",
+        col="Population",
+        row="Model Type",
+        hue="Test Pop. 1",
+        kind="point",
+        linestyles="--",
+        margin_titles=True,
+    )
+    plt.savefig("temp.png")
+
+    # for model_type in df.model_type.drop_duplicates():
+    #     plt.clf()
+    #     plt.rcParams.update({"font.size": 12})
+    #     sns.catplot(
+    #         data=df.loc[df.model_type == model_type],
+    #         x="Bin Median MIC",
+    #         y="Accuracy",
+    #         row="Population",
+    #         col="Test Pop. 1",
+    #         kind="bar",
+    #         color="#1f77b4",
+    #     )
+    #     plt.title(model_type)
+    #     plt.subplots_adjust(bottom=0.1)
+    #     plt.savefig(f"{model_type}.png")

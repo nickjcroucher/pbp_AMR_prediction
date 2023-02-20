@@ -15,9 +15,11 @@ def venn_diagram(
     feature_sets = [{i[0] for i in features_cuttoff_dict[p]} for p in p_values]
 
     plt.clf()
+    plt.rcParams.update({"font.size": 12})
     matplotlib_venn.venn3_unweighted(
         feature_sets, set_labels=[f"p value cuttoff = {i}" for i in p_values]
     )
+    plt.subplots_adjust(left=-0.5)
     plt.savefig(fname)
 
 
@@ -43,10 +45,12 @@ def parallel_coords_plot(
     df = df.reset_index().rename(columns={"index": "p-value"})
 
     plt.clf()
+    plt.rcParams.update({"font.size": 12})
     pd.plotting.parallel_coordinates(df, "p-value")
     plt.legend(title="p-value")
     plt.xlabel("Feature Pair")
     plt.ylabel("Linear Coefficient")
+    plt.tight_layout()
     plt.savefig(fname)
 
 
@@ -118,12 +122,12 @@ def main(
         pickle.dump(features_cuttoff_dict, a)
 
     venn_diagram(
-        f"results/intermediates/maela_updated_mic_rerun/cdc/sensitivity_analysis/{test_data_population_1}_venn_diagram2.png",
+        f"results/intermediates/maela_updated_mic_rerun/cdc/sensitivity_analysis/{test_data_population_1}_venn_diagram3.png",
         features_cuttoff_dict,
         p_values=p_values,
     )
     parallel_coords_plot(
-        f"results/intermediates/maela_updated_mic_rerun/cdc/sensitivity_analysis/{test_data_population_1}_parcoords_plot2.png",
+        f"results/intermediates/maela_updated_mic_rerun/cdc/sensitivity_analysis/{test_data_population_1}_parcoords_plot3.png",
         features_cuttoff_dict,
         p_values=p_values,
     )

@@ -69,6 +69,8 @@ def plot_interactions(model: Lasso, interactions: List[Tuple[int, int]]):
         index=["a1", "b2", "x2"],
     )
 
+    plt.rcParams.update({"font.size": 12})
+
     plt.clf()
     sns.heatmap(interaction_counts, mask=mask, cmap="crest", annot=True)
     plt.title("#Interactions")
