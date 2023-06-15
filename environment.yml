@@ -1,0 +1,34 @@
+name: pbp_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - pip
+  - blitz-bayesian-pytorch
+  - biopython
+  - blitz
+  - chex>0.1.6
+  - cmdstanpy
+  - jax
+  - jaxlib
+  - matplotlib
+  - networkx
+  - nptyping
+  - numpy
+  - numpyro
+  - pandas
+  - pyhmmer
+  - scikit-learn
+  - scipy
+  - seaborn
+  - pytorch
+  - tqdm
+  - typing
+  - python=3.10
+  # pip
+  - pip:
+    - bayesian-optimization
+    - python-math
+    - ray
+    - psutil
