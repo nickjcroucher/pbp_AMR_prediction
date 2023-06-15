@@ -10,8 +10,8 @@ from parse_pbp_data import (
     pairwise_blast_comparisons,
 )
 
-cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
-pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
+cdc = pd.read_csv("./data/pneumo_pbp/cdc_seqs_df.csv")
+pmen = pd.read_csv("./data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
 pbp_patterns = ["a1", "b2", "x2"]
 cdc_seqs = parse_cdc(cdc, pbp_patterns)
 pmen_seqs = parse_pmen(pmen, cdc_seqs, pbp_patterns)

@@ -327,9 +327,9 @@ population_2 should be unique and should be either of cdc, maela, or pmen"
         )
     pbp_patterns = ["a1", "b2", "x2"]
 
-    cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
-    pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
-    maela = pd.read_csv("../data/pneumo_pbp/maela_aa_df.csv")
+    cdc = pd.read_csv("./data/pneumo_pbp/cdc_seqs_df.csv")
+    pmen = pd.read_csv("./data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
+    maela = pd.read_csv("./data/pneumo_pbp/maela_aa_df.csv")
 
     if maela_correction:
         maela.loc[maela.mic == 0.060, 'mic'] = 0.03
@@ -404,8 +404,8 @@ def load_extended_sequence_data(
         )
     pbp_patterns = ["a1", "b2", "x2"]
 
-    pmen = pd.read_csv("../data/pneumo_pbp/pmen_full_pbp_seqs_mic.csv")
-    maela = pd.read_csv("../data/pneumo_pbp/maela_full_pbp_mic.csv")
+    pmen = pd.read_csv("./data/pneumo_pbp/pmen_full_pbp_seqs_mic.csv")
+    maela = pd.read_csv("./data/pneumo_pbp/maela_full_pbp_mic.csv")
 
     if maela_correction:
         maela.loc[maela.mic == 0.060, 'mic'] = 0.03

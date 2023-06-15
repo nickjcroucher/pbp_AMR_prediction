@@ -308,9 +308,9 @@ def build_co_occurrence_graph(
 
 
 def main():
-    cdc_raw = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
-    pmen_raw = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
-    maela_raw = pd.read_csv("../data/pneumo_pbp/maela_aa_df.csv")
+    cdc_raw = pd.read_csv("./data/pneumo_pbp/cdc_seqs_df.csv")
+    pmen_raw = pd.read_csv("./data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
+    maela_raw = pd.read_csv("./data/pneumo_pbp/maela_aa_df.csv")
 
     pbp_patterns = ["a1", "b2", "x2"]
 

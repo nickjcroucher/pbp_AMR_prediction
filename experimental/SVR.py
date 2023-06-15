@@ -178,8 +178,8 @@ def plot_hps(
 def main():
     logging.info("Reading and formatting inputs")
 
-    cdc = pd.read_csv("../data/pneumo_pbp/cdc_seqs_df.csv")
-    pmen = pd.read_csv("../data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
+    cdc = pd.read_csv("./data/pneumo_pbp/cdc_seqs_df.csv")
+    pmen = pd.read_csv("./data/pneumo_pbp/pmen_pbp_profiles_extended.csv")
 
     pbp_patterns = ["a1", "b2", "x2"]
     pbp_seqs = [i + "_seq" for i in pbp_patterns]
