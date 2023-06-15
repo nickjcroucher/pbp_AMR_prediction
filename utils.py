@@ -442,8 +442,8 @@ def load_extended_sequence_data(
 
 
 def accuracy(
-    predictions: nptyping.NDArray[nptyping.Float],
-    labels: nptyping.NDArray[nptyping.Float],
+    predictions: nptyping.NDArray[Any,nptyping.Float],
+    labels: nptyping.NDArray[Any,nptyping.Float]
 ) -> float:
     """
     Prediction accuracy defined as percentage of predictions within 1 twofold
@@ -455,8 +455,8 @@ def accuracy(
 
 
 def bin_labels(
-    labels: nptyping.NDArray[nptyping.Float],
-) -> nptyping.NDArray[nptyping.Float]:
+    labels: nptyping.NDArray[Any,nptyping.Float],
+) -> nptyping.NDArray[Any,nptyping.Float]:
 
     # apply Freedman-Diaconis rule to get optimal bin size
     # https://en.wikipedia.org/wiki/Freedman%E2%80%93Diaconis_rule
@@ -478,8 +478,8 @@ def bin_labels(
 
 
 def mean_acc_per_bin(
-    predictions: nptyping.NDArray[nptyping.Float],
-    labels: nptyping.NDArray[nptyping.Float],
+    predictions: nptyping.NDArray[Any,nptyping.Float],
+    labels: nptyping.NDArray[Any,nptyping.Float],
 ) -> float:
     """
     Splits labels into bins of size = bin_size, and calculates the prediction
@@ -532,10 +532,10 @@ class ResultsContainer:
     testing_mean_acc_per_bin_1: float
     testing_mean_acc_per_bin_2: float
 
-    training_predictions: nptyping.NDArray[nptyping.Float]
-    validation_predictions: nptyping.NDArray[nptyping.Float]
-    testing_predictions_1: nptyping.NDArray[nptyping.Float]
-    testing_predictions_2: nptyping.NDArray[nptyping.Float]
+    training_predictions: nptyping.NDArray[Any,nptyping.Float]
+    validation_predictions: nptyping.NDArray[Any,nptyping.Float]
+    testing_predictions_1: nptyping.NDArray[Any,nptyping.Float]
+    testing_predictions_2: nptyping.NDArray[Any,nptyping.Float]
 
     hyperparameters: Dict[str, float]
 
