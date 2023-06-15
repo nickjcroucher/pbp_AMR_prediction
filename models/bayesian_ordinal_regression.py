@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 import numpyro
 import seaborn as sns
 from jax import numpy as jnp
-from jax import random
-from jax.interpreters.xla import _DeviceArray
+from jax import random, Array
+#from jax.interpreters.xla import _DeviceArray
 from numpyro import sample
 from numpyro.diagnostics import gelman_rubin
 from numpyro.distributions import (
@@ -32,9 +32,11 @@ class BayesianOrdinalRegression:
         beta_prior_sd: float = 1.0,
         num_chains: int = 4,
     ):
-        if not isinstance(X, _DeviceArray):
+#        if not isinstance(X, _DeviceArray):
+        if not isinstance(X, Array):
             X = jnp.array(X)
-        if not isinstance(Y, _DeviceArray):
+#        if not isinstance(Y, _DeviceArray):
+        if not isinstance(Y, Array):
             Y = jnp.array(Y)
         self.X = X
         self.Y = Y
@@ -134,8 +136,10 @@ class BayesianOrdinalRegression:
         self.posterior_samples = self.mcmc.get_samples()
         self.last_mcmc_state = self.mcmc.last_state
 
-    def predict(self, X: Iterable, num_samples: Optional[int] = None) -> _DeviceArray:
-        if not isinstance(X, _DeviceArray):
+#    def predict(self, X: Iterable, num_samples: Optional[int] = None) -> _DeviceArray:
+    def predict(self, X: Iterable, num_samples: Optional[int] = None) -> Array:
+#        if not isinstance(X, _DeviceArray):
+        if not isinstance(X, Array):
             X = jnp.array(X)
         return Predictive(
             self._model,
