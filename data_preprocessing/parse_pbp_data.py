@@ -272,7 +272,7 @@ def encode_sequences(data: pd.DataFrame, pbp_patterns: List[str]) -> sparse.csr_
         n_var = len(sequences.iloc[0])
 
         # format as array for encoder
-        sequences = np.array(sequences.apply(list).to_list()).astype(np.object)  # type: ignore # noqa: E501
+        sequences = np.array(sequences.apply(list).to_list()).astype(object)  # type: ignore # noqa: E501
         enc = OneHotEncoder(
             handle_unknown="error",
             categories=[AMINO_ACIDS for i in range(n_var)],
