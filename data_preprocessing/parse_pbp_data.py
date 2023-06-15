@@ -276,7 +276,7 @@ def encode_sequences(data: pd.DataFrame, pbp_patterns: List[str]) -> sparse.csr_
         enc = OneHotEncoder(
             handle_unknown="error",
             categories=[AMINO_ACIDS for i in range(n_var)],
-            sparse=False,
+            sparse_output=False,
             dtype=int,
         )
         enc.fit(sequences)
