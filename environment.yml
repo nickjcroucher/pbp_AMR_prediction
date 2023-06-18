@@ -26,6 +26,8 @@ dependencies:
   - tqdm
   - typing
   - python=3.10
+  - pyarrow
+  - fastparquet
   # pip
   - pip:
     - bayesian-optimization
